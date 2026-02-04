@@ -1,0 +1,53 @@
+import { NextResponse } from 'next/server'
+import { prisma } from '../../../../lib/prisma'
+import { verifyAuth } from '../../../../lib/auth'
+
+// GET - جلب بيانات عضو واحد (متاح للكوتش بدون صلاحيات خاصة)
+export async function GET(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    // التحقق من تسجيل الدخول فقط
+    const user = await verifyAuth(request)
+    if (!user) {
+      return NextResponse.json(
+        { error: 'يجب تسجيل الدخول أولاً' },
+        { status: 401 }
+      )
+    }
+
+    const memberId = params.id
+
+    const member = await prisma.member.findUnique({
+      where: { id: memberId },
+      include: {
+        receipts: true,
+        loyalty: {
+          include: {
+            transactions: {
+              orderBy: {
+                createdAt: 'desc'
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (!member) {
+      return NextResponse.json(
+        { error: 'لم يتم العثور على العضو' },
+        { status: 404 }
+      )
+    }
+
+    return NextResponse.json(member, { status: 200 })
+  } catch (error: any) {
+    console.error('❌ Error fetching member:', error)
+    return NextResponse.json(
+      { error: 'فشل جلب بيانات العضو' },
+      { status: 500 }
+    )
+  }
+}

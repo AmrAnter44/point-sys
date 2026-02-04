@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run dev:*)",
+      "Bash(timeout:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)",
+      "Bash(powershell -Command \"Stop-Process -Id 23176 -Force\")",
+      "Bash(powershell -Command \"Select-String -Path ''c:\\\\Users\\\\amran\\\\Desktop\\\\systems\\\\engkish\\\\x gym\\\\app\\\\members\\\\[id]\\\\page.tsx'' -Pattern ''[\\\\u0600-\\\\u06FF]+'' | Select-Object -First 50 LineNumber,Line\")",
+      "Bash(node:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(npx tsc:*)",
+      "Bash(dir /s /b \"c:\\\\Users\\\\amran\\\\Desktop\\\\systems\\\\engkish\\\\x gym\\\\app\\\\api\")",
+      "Bash(npx prisma migrate:*)",
+      "Bash(npx prisma db push:*)",
+      "Bash(dir:*)",
+      "Bash(ls -la \"c:\\\\Users\\\\amran\\\\Desktop\\\\systems\\\\point\\\\point\\\\app\\\\api\\\\members\\\\[id]\"\" 2>&1 || echo \"Directory does not exist \")",
+      "Bash(npx prisma generate:*)",
+      "Bash(npx prisma migrate dev:*)",
+      "Bash(cat:*)",
+      "Bash(node add-translations.js:*)",
+      "Bash(npx prisma studio)",
+      "Bash(npx prisma studio:*)",
+      "Bash(node check-loyalty.js:*)",
+      "Bash(node test-session-points.js:*)",
+      "Bash(node scripts/clean-member-ids.js:*)",
+      "Bash(del scriptsclean-member-ids.js)",
+      "Bash(node -e:*)",
+      "Bash(npm run build:*)"
+    ]
+  }
+}

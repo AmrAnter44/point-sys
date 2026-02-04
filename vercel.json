@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/loyalty/birthday-check",
+      "schedule": "0 0 * * *"
+    }
+  ]
+}

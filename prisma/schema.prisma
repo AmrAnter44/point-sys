@@ -1,0 +1,811 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Member {
+  id                String       @id @default(cuid())
+  memberNumber      Int?         @unique
+  name              String
+  phone             String
+  nationalId        String?      // الرقم القومي (اختياري)
+  email             String?      // البريد الإلكتروني (اختياري)
+  profileImage      String?
+  inBodyScans       Int          @default(0)
+  invitations       Int          @default(0)
+  freePTSessions    Int          @default(0)
+  subscriptionPrice Float
+  subscriptionType  String?      // "1month", "3months", "6months", "1year"
+  remainingAmount   Float        @default(0)
+  pointsCredit      Float        @default(0)  // رصيد المكافآت للصرف على الخدمات
+  notes             String?
+  isActive          Boolean      @default(true)
+  startDate         DateTime?
+  expiryDate        DateTime?
+  createdAt         DateTime     @default(now())
+
+  // Freeze Fields
+  freezeStartDate   DateTime?
+  freezeEndDate     DateTime?
+  isFrozen          Boolean      @default(false)
+
+  // Loyalty Points Fields
+  birthdate         DateTime?
+  lastBirthdayReward DateTime?
+  currentOfferId    String?
+  currentOfferName  String?
+
+  // Package Benefits Fields
+  movementAssessments   Int      @default(0)
+  nutritionSessions     Int      @default(0)
+  physiotherapySessions Int      @default(0)
+  monthlyAttendanceGoal Int      @default(0)
+  onboardingSessions    Int      @default(0)
+  followUpSessions      Int      @default(0)
+  groupClasses          Int      @default(0)
+  poolSessions          Int      @default(0)
+  paddleSessions        Int      @default(0)
+  freezingDays          Int      @default(0)
+  upgradeAllowedDays    Int      @default(0)
+  attendanceLimit       Int      @default(0)  // حد الحضور (0 = غير محدود)
+
+  // Referral System Fields
+  referredById      String?  // العضو الذي قام بالإحالة
+  referredBy        Member?  @relation("MemberReferrals", fields: [referredById], references: [id])
+  referrals         Member[] @relation("MemberReferrals")
+
+  // Coach Assignment Field
+  assignedCoachId   String?
+  assignedCoach     Staff?   @relation("CoachAssignments", fields: [assignedCoachId], references: [id])
+
+  // Commission Tracking - للتجديد/الترقية
+  referringCoachId     String?
+  referringCoach       Staff?   @relation("ReferringCoaches", fields: [referringCoachId], references: [id], onDelete: SetNull)
+
+  invitationRecords    Invitation[]
+  receipts             Receipt[]
+  checkIns             MemberCheckIn[]
+  fitnessTest          FitnessTest?
+  fitnessTestRequests  FitnessTestRequest[]
+  loyalty              MemberLoyalty?
+  expenses             Expense[]
+  classPackages        ClassPackage[]
+  commissions          CoachCommission[] @relation("MemberCommissions")
+  nutritionPackages    NutritionPackage[] @relation("NutritionPackages")
+  physiotherapyPackages PhysiotherapyPackage[] @relation("PhysiotherapyPackages")
+
+  @@index([referredById])
+  @@index([assignedCoachId])
+  @@index([referringCoachId])
+}
+
+model MemberCheckIn {
+  id                    String    @id @default(cuid())
+  memberId              String
+  checkInTime           DateTime  @default(now())
+  checkInMethod         String    @default("scan")
+
+  member                Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([memberId])
+  @@index([checkInTime])
+}
+
+model PT {
+  ptNumber          Int         @id @default(autoincrement())
+  clientName        String
+  phone             String
+  sessionsPurchased Int
+  sessionsRemaining Int
+  coachName         String
+  pricePerSession   Float
+  startDate         DateTime?
+  expiryDate        DateTime?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  coachUserId       String?
+  qrCode            String?     @unique
+  qrCodeImage       String?
+  isOnlineCoaching  Boolean     @default(false)
+  sessions          PTSession[]
+  receipts          Receipt[]
+
+  @@index([coachUserId])
+  @@index([qrCode])
+}
+
+model PTSession {
+  id          String    @id @default(cuid())
+  ptNumber    Int
+  clientName  String
+  coachName   String
+  sessionDate DateTime
+  notes       String?
+  createdAt   DateTime  @default(now())
+  attended    Boolean   @default(false)
+  attendedAt  DateTime?
+  attendedBy  String?
+  pt          PT        @relation(fields: [ptNumber], references: [ptNumber], onDelete: Cascade)
+
+  @@index([ptNumber])
+  @@index([sessionDate])
+  @@index([attended])
+}
+
+model PhysiotherapyPackage {
+  id                String    @id @default(cuid())
+  clientName        String
+  clientPhone       String
+  memberId          String?
+  packageType       String    // "single", "5sessions", "10sessions", "15sessions"
+  sessionsPurchased Int
+  sessionsUsed      Int       @default(0)
+  pricePerSession   Float
+  totalPrice        Float
+  discountAmount    Float     @default(0)
+  discountPercent   Int       @default(0)
+  memberTier        String?   // "Challenger", "Fighter", "Champion", "Elite"
+  basePrice         Float
+  paymentMethod     String    @default("cash")
+  staffName         String
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  // Commission Tracking
+  referringCoachId  String?
+  referringCoach    Staff?  @relation("PhysioReferrals", fields: [referringCoachId], references: [id], onDelete: SetNull)
+
+  // Member Relation
+  member            Member? @relation("PhysiotherapyPackages", fields: [memberId], references: [id], onDelete: SetNull)
+
+  sessions          PhysiotherapySession[]
+  receipts          Receipt[]
+
+  @@index([memberId])
+  @@index([clientPhone])
+  @@index([createdAt])
+  @@index([referringCoachId])
+}
+
+model PhysiotherapySession {
+  id           String                @id @default(cuid())
+  packageId    String
+  clientName   String
+  sessionDate  DateTime
+  notes        String?
+  createdAt    DateTime              @default(now())
+  staffName    String?
+
+  package      PhysiotherapyPackage  @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@index([packageId])
+  @@index([sessionDate])
+}
+
+model NutritionPackage {
+  id                   String    @id @default(cuid())
+  clientName           String
+  clientPhone          String
+  memberId             String?
+  packageType          String    // "single", "1month", "2months", "3months"
+  duration             Int       // Duration in months (0 for single session)
+  followUpsIncluded    Int       // Number of follow-ups included
+  followUpsUsed        Int       @default(0)
+  inBodyScansIncluded  Int       // Number of InBody scans included
+  inBodyScansUsed      Int       @default(0)
+  mealUpdates          Int       // Number of meal plan updates included
+  strategyUpdates      Int       // Number of strategy updates
+  totalPrice           Float
+  discountAmount       Float     @default(0)
+  discountPercent      Int       @default(0)
+  memberTier           String?   // "Challenger", "Fighter", "Champion", "Elite"
+  basePrice            Float
+  paymentMethod        String    @default("cash")
+  staffName            String
+  startDate            DateTime  @default(now())
+  expiryDate           DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  // Commission Tracking
+  referringCoachId  String?
+  referringCoach    Staff?  @relation("NutritionReferrals", fields: [referringCoachId], references: [id], onDelete: SetNull)
+
+  // Member Relation
+  member            Member? @relation("NutritionPackages", fields: [memberId], references: [id], onDelete: SetNull)
+
+  followUps            NutritionFollowUp[]
+  receipts             Receipt[]
+
+  @@index([memberId])
+  @@index([clientPhone])
+  @@index([createdAt])
+  @@index([expiryDate])
+  @@index([referringCoachId])
+}
+
+model NutritionFollowUp {
+  id             String            @id @default(cuid())
+  packageId      String
+  clientName     String
+  followUpDate   DateTime
+  weight         Float?
+  bodyFat        Float?
+  muscleMass     Float?
+  measurements   String?           // JSON string for body measurements
+  photos         String?           // JSON string for progress photos URLs
+  notes          String?
+  staffName      String?
+  createdAt      DateTime          @default(now())
+
+  package        NutritionPackage  @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@index([packageId])
+  @@index([followUpDate])
+}
+
+model ClassPackage {
+  packageNumber    Int       @id @default(autoincrement())
+
+  // معلومات العميل
+  clientName       String
+  phone            String
+  memberId         String?   // FK للعضو (nullable لأن ممكن يكون non-member)
+  subscriptionType String?   // نوع عضوية الجيم (1month, 3months, 6months, 1year, null للـ non-member)
+
+  // معلومات الباقة
+  packageType      String    // "single" أو "10sessions"
+  sessionsPurchased Int      // عدد الجلسات المشتراة (1 أو 10)
+  sessionsRemaining Int      // عدد الجلسات المتبقية
+
+  // المدرب/المشرف
+  instructorName   String?
+  instructorId     String?   // FK to Staff
+
+  // التسعير
+  pricePerSession  Float     // سعر الجلسة الواحدة
+  totalPrice       Float     // السعر الإجمالي
+  paidAmount       Float     @default(0)
+  remainingAmount  Float     @default(0)
+
+  // Barcode (فقط للأعضاء المشتركين)
+  qrCode           String?   @unique
+  qrCodeImage      String?   // Base64 PNG
+
+  // التواريخ
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  // العلاقات
+  member           Member?   @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  instructor       Staff?    @relation("ClassInstructors", fields: [instructorId], references: [id], onDelete: SetNull)
+  sessions         ClassSession[]
+  receipts         Receipt[]
+
+  @@index([phone])
+  @@index([memberId])
+}
+
+model ClassSession {
+  id              String    @id @default(cuid())
+  packageNumber   Int
+
+  clientName      String
+  instructorName  String?
+
+  sessionDate     DateTime  @default(now())
+  attended        Boolean   @default(true)  // true عند الإنشاء
+  attendedAt      DateTime?
+  attendedBy      String?   // اسم الموظف اللي سجل الحضور
+
+  notes           String?
+  createdAt       DateTime  @default(now())
+
+  package         ClassPackage @relation(fields: [packageNumber], references: [packageNumber], onDelete: Cascade)
+
+  @@index([packageNumber])
+  @@index([sessionDate])
+  @@index([attended])
+}
+
+model DayUseInBody {
+  id          String    @id @default(cuid())
+  name        String
+  phone       String
+  serviceType String
+  price       Float
+  staffName   String
+  createdAt   DateTime  @default(now())
+  receipts    Receipt[]
+}
+
+model Visitor {
+  id           String     @id @default(cuid())
+  name         String
+  phone        String     @unique
+  notes        String?
+  source       String     @default("walk-in")
+  interestedIn String?
+  status       String     @default("pending")
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  followUps    FollowUp[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([phone])
+}
+
+model FollowUp {
+  id               String    @id @default(cuid())
+  visitorId        String
+  notes            String
+  contacted        Boolean   @default(false)
+  nextFollowUpDate DateTime?
+  result           String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  salesName        String?
+  visitor          Visitor   @relation(fields: [visitorId], references: [id], onDelete: Cascade)
+
+  @@index([visitorId])
+  @@index([nextFollowUpDate])
+  @@index([contacted])
+}
+
+model Receipt {
+  id            String        @id @default(cuid())
+  receiptNumber Int           @unique
+  type          String
+  amount        Float
+  itemDetails   String
+  paymentMethod String        @default("cash")
+  createdAt     DateTime      @default(now())
+  staffName     String?
+  memberId          String?
+  ptNumber          Int?
+  dayUseId          String?
+  physiotherapyId   String?
+  nutritionId       String?
+  classPackageNumber Int?
+
+  // Cancellation Tracking
+  isCancelled       Boolean       @default(false)
+  cancelledAt       DateTime?
+  cancelledBy       String?
+  cancellationReason String?
+
+  // Commission Tracking
+  renewalType       String?       // نوع التجديد للعمولات (gym_challenger, gym_fighter, etc.)
+  referringCoachId  String?
+  referringCoach    Staff?  @relation("ReceiptReferrals", fields: [referringCoachId], references: [id], onDelete: SetNull)
+
+  dayUse            DayUseInBody?          @relation(fields: [dayUseId], references: [id])
+  pt                PT?                    @relation(fields: [ptNumber], references: [ptNumber])
+  member            Member?                @relation(fields: [memberId], references: [id])
+  physiotherapy     PhysiotherapyPackage?  @relation(fields: [physiotherapyId], references: [id])
+  nutrition         NutritionPackage?      @relation(fields: [nutritionId], references: [id])
+  classPackage      ClassPackage?          @relation(fields: [classPackageNumber], references: [packageNumber])
+  commissions       CoachCommission[]      @relation("ReceiptCommissions")
+
+  @@index([referringCoachId])
+}
+
+model ReceiptCounter {
+  id        Int      @id @default(autoincrement())
+  current   Int      @default(1000)
+}
+
+model MemberCounter {
+  id      Int @id @default(autoincrement())
+  current Int @default(1000)
+}
+
+model Offer {
+  id                    String   @id @default(cuid())
+  name                  String
+  duration              Int      // المدة بالأيام
+  price                 Float
+  freePTSessions        Int      @default(0)
+  inBodyScans           Int      @default(0)
+  invitations           Int      @default(0)
+  movementAssessments   Int      @default(0) // تقييمات الحركة
+  nutritionSessions     Int      @default(0) // جلسات التغذية
+  monthlyAttendanceGoal Int      @default(0) // هدف الحضور الشهري
+  upgradeAllowedDays    Int      @default(0) // عدد الأيام المسموحة للترقية
+  onboardingSessions    Int      @default(0) // جلسات التعريف
+  followUpSessions      Int      @default(0) // جلسات المتابعة
+  groupClasses          Int      @default(0) // الحصص الجماعية
+  poolSessions          Int      @default(0) // جلسات المسبح
+  paddleSessions        Int      @default(0) // جلسات البادل
+  freezingDays          Int      @default(0) // أيام التجميد
+  attendanceLimit       Int      @default(0) // حد الحضور (0 = غير محدود)
+  icon                  String   @default("📅")
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model Staff {
+  id           String         @id @default(cuid())
+  staffCode    String         @unique
+  name         String
+  phone        String?
+  position     String?
+  salary       Float?
+  notes        String?
+  isActive     Boolean        @default(true)
+  isTopSales   Boolean        @default(false)  // موظف مبيعات مميز يحصل على +50 ج.م إضافية
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  attendance          Attendance[]
+  expenses            Expense[]
+  user                User?
+  fitnessTests        FitnessTest[]
+  fitnessTestRequests FitnessTestRequest[] @relation("FitnessTestRequests")
+  rotations           Rotation[]
+  assignedMembers     Member[]             @relation("CoachAssignments")
+  classPackages       ClassPackage[]       @relation("ClassInstructors")
+
+  // Commission Relations
+  commissions              CoachCommission[]         @relation("CoachCommissions")
+  monthlyReports           MonthlyCommissionReport[] @relation("MonthlyReports")
+  referredMembers          Member[]                  @relation("ReferringCoaches")
+  physioReferrals          PhysiotherapyPackage[]    @relation("PhysioReferrals")
+  nutritionReferrals       NutritionPackage[]        @relation("NutritionReferrals")
+  receiptReferrals         Receipt[]                 @relation("ReceiptReferrals")
+
+  @@index([staffCode])
+}
+
+model Attendance {
+  id        String    @id @default(cuid())
+  staffId   String
+  checkIn   DateTime
+  checkOut  DateTime?
+  duration  Int?
+  notes     String?
+  createdAt DateTime  @default(now())
+  staff     Staff     @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([staffId])
+  @@index([checkIn])
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  type        String
+  amount      Float
+  description String
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  staffId     String?
+  isPaid      Boolean  @default(false)
+  memberId    String?  // ربط بالعضو (للمكافآت النقدية)
+  staff       Staff?   @relation(fields: [staffId], references: [id])
+  member      Member?  @relation(fields: [memberId], references: [id])
+
+  @@index([memberId])
+}
+
+model Invitation {
+  id         String   @id @default(cuid())
+  guestName  String
+  guestPhone String
+  notes      String?
+  createdAt  DateTime @default(now())
+  memberId   String
+  member     Member   @relation(fields: [memberId], references: [id])
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  name         String
+  password     String
+  role         String        @default("STAFF")
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  staffId      String?       @unique
+  activityLogs ActivityLog[]
+  permissions  Permission?
+  staff        Staff?        @relation(fields: [staffId], references: [id])
+}
+
+model Permission {
+  id                      String  @id @default(cuid())
+  userId                  String  @unique
+  canViewMembers          Boolean @default(false)
+  canCreateMembers        Boolean @default(false)
+  canEditMembers          Boolean @default(false)
+  canDeleteMembers        Boolean @default(false)
+  canViewPT               Boolean @default(false)
+  canCreatePT             Boolean @default(false)
+  canEditPT               Boolean @default(false)
+  canDeletePT             Boolean @default(false)
+  canRegisterPTAttendance Boolean @default(false)
+  canViewPhysio           Boolean @default(false)
+  canCreatePhysio         Boolean @default(false)
+  canEditPhysio           Boolean @default(false)
+  canDeletePhysio         Boolean @default(false)
+  canViewNutrition        Boolean @default(false)
+  canCreateNutrition      Boolean @default(false)
+  canEditNutrition        Boolean @default(false)
+  canDeleteNutrition      Boolean @default(false)
+  canViewStaff            Boolean @default(false)
+  canCreateStaff          Boolean @default(false)
+  canEditStaff            Boolean @default(false)
+  canDeleteStaff          Boolean @default(false)
+  canViewReceipts         Boolean @default(false)
+  canEditReceipts         Boolean @default(false)
+  canDeleteReceipts       Boolean @default(false)
+  canViewExpenses         Boolean @default(false)
+  canCreateExpense        Boolean @default(false)
+  canEditExpense          Boolean @default(false)
+  canDeleteExpense        Boolean @default(false)
+  canViewVisitors         Boolean @default(false)
+  canCreateVisitor        Boolean @default(false)
+  canEditVisitor          Boolean @default(false)
+  canDeleteVisitor        Boolean @default(false)
+  canViewFollowUps        Boolean @default(false)
+  canCreateFollowUp       Boolean @default(false)
+  canEditFollowUp         Boolean @default(false)
+  canDeleteFollowUp       Boolean @default(false)
+  canViewDayUse           Boolean @default(false)
+  canCreateDayUse         Boolean @default(false)
+  canEditDayUse           Boolean @default(false)
+  canDeleteDayUse         Boolean @default(false)
+  canViewReports          Boolean @default(false)
+  canViewFinancials       Boolean @default(false)
+  canViewAttendance       Boolean @default(false)
+  canAccessClosing        Boolean @default(false)
+  canAccessSettings       Boolean @default(false)
+  canAccessAdmin          Boolean @default(false)
+  canCreateFitnessTest    Boolean @default(false)
+  canViewFitnessTests     Boolean @default(false)
+  canManageLoyaltyPoints  Boolean @default(false)
+  user                    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ActivityLog {
+  id         String   @id @default(cuid())
+  userId     String
+  action     String
+  resource   String
+  resourceId String?
+  details    String?
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model FitnessTest {
+  id                String    @id @default(cuid())
+  memberId          String    @unique
+  coachId           String
+  coachUserId       String
+  testDate          DateTime
+
+  medFirstTimeGym              Boolean   @default(false)
+  medInDietPlan                Boolean   @default(false)
+  medHernia                    Boolean   @default(false)
+  medFamilyHeartHistory        Boolean   @default(false)
+  medHeartProblem              Boolean   @default(false)
+  medBackPain                  Boolean   @default(false)
+  medSurgery                   Boolean   @default(false)
+  medBreathingProblems         Boolean   @default(false)
+  medBloodPressure             Boolean   @default(false)
+  medKneeProblem               Boolean   @default(false)
+  medDiabetes                  Boolean   @default(false)
+  medSmoker                    Boolean   @default(false)
+  medHighCholesterol           Boolean   @default(false)
+
+  flexibilityData  String
+  exerciseData     String
+
+  createdAt        DateTime  @default(now())
+  createdBy        String
+
+  member           Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  coach            Staff     @relation(fields: [coachId], references: [id])
+
+  @@index([memberId])
+  @@index([coachUserId])
+}
+
+model FitnessTestRequest {
+  id           String   @id @default(cuid())
+  memberId     String
+  coachId      String
+  status       String   @default("pending") // pending, completed, cancelled
+  requestedBy  String
+  requestedAt  DateTime @default(now())
+  completedAt  DateTime?
+  notes        String?
+
+  member       Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  coach        Staff    @relation("FitnessTestRequests", fields: [coachId], references: [id])
+
+  @@index([coachId])
+  @@index([status])
+  @@index([memberId])
+}
+
+model Rotation {
+  id          String   @id @default(cuid())
+  staffId     String
+  dayOfWeek   String   // Monday, Tuesday, etc.
+  startTime   String   // "09:00"
+  endTime     String   // "17:00"
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  staff       Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([staffId])
+  @@index([dayOfWeek])
+}
+
+model MemberLoyalty {
+  id                     String               @id @default(cuid())
+  memberId               String               @unique
+  pointsBalance          Int                  @default(0)
+  totalEarned            Int                  @default(0)
+  totalRedeemed          Int                  @default(0)
+  hasReviewBonus         Boolean              @default(false)
+  goalAchievementsCount  Int                  @default(0)
+  referralCount          Int                  @default(0)  // إجمالي الإحالات
+  pendingCashRewards     Int                  @default(0)  // عدد المكافآت النقدية القابلة للاستلام
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+
+  member                 Member               @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  transactions           LoyaltyTransaction[]
+
+  @@index([memberId])
+}
+
+model LoyaltyTransaction {
+  id              String        @id @default(cuid())
+  loyaltyId       String
+  memberId        String
+  type            String
+  points          Int
+  source          String
+  description     String
+  receiptId       String?
+  invitationId    String?
+  staffName       String?
+  metadata        String?
+  createdAt       DateTime      @default(now())
+
+  loyalty         MemberLoyalty @relation(fields: [loyaltyId], references: [id], onDelete: Cascade)
+
+  @@index([memberId])
+  @@index([loyaltyId])
+  @@index([source])
+  @@index([createdAt])
+}
+
+model CoachCommission {
+  id                String   @id @default(cuid())
+  coachId           String
+  coach             Staff    @relation("CoachCommissions", fields: [coachId], references: [id], onDelete: Cascade)
+
+  // نوع العمولة
+  type              String   // "mrcb_challenger", "mrcb_fighter", "mrcb_champion", "mrcb_elite",
+                             // "upsell_physio", "upsell_nutrition", "upsell_upgrade",
+                             // "performance_multiplier", "top_performer"
+
+  // المبلغ وتفاصيل الحساب
+  amount            Float
+  calculationDetails String? // JSON: { memberTier, rate, baseAmount, etc. }
+
+  // الربط بالسجلات ذات الصلة
+  memberId          String?
+  member            Member?  @relation("MemberCommissions", fields: [memberId], references: [id], onDelete: SetNull)
+  receiptId         String?
+  receipt           Receipt? @relation("ReceiptCommissions", fields: [receiptId], references: [id], onDelete: SetNull)
+
+  // التتبع
+  month             String   // "YYYY-MM" للتجميع الشهري
+  status            String   @default("pending") // "pending", "approved", "paid"
+  paidAt            DateTime?
+  createdAt         DateTime @default(now())
+  notes             String?
+
+  @@index([coachId, month, status])
+  @@index([memberId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model MonthlyCommissionReport {
+  id                    String   @id @default(cuid())
+  coachId               String
+  coach                 Staff    @relation("MonthlyReports", fields: [coachId], references: [id], onDelete: Cascade)
+  month                 String   // "YYYY-MM"
+
+  // تفصيل MRCB حسب المستوى
+  mrcbChallenger        Float    @default(0)  // 50 EGP × عدد
+  mrcbFighter           Float    @default(0)  // 100 EGP × عدد
+  mrcbChampion          Float    @default(0)  // 150 EGP × عدد
+  mrcbElite             Float    @default(0)  // 200 EGP × عدد
+  mrcbClientsCount      Int      @default(0)  // عدد العملاء المستحقين
+  mrcbTotal             Float    @default(0)
+
+  // عمولات البيع (5% لكل منها)
+  upsellPhysio          Float    @default(0)
+  upsellPhysioCount     Int      @default(0)
+  upsellNutrition       Float    @default(0)
+  upsellNutritionCount  Int      @default(0)
+  upsellUpgrade         Float    @default(0)
+  upsellUpgradeCount    Int      @default(0)
+  upsellTotal           Float    @default(0)
+
+  // أهداف الأداء
+  serviceReferrals      Int      @default(0)  // Physio + Nutrition
+  membershipUpgrades    Int      @default(0)  // عدد الترقيات
+  targetMet             Boolean  @default(false)  // 5 services + 3 upgrades
+  targetDoubled         Boolean  @default(false)  // 10 services + 6 upgrades
+  performanceMultiplier Float    @default(0)  // 0, 50, or 100 لكل عميل نشط
+  activeClientsCount    Int      @default(0)  // العملاء النشطين (assignedCoachId)
+  performanceBonus      Float    @default(0)  // multiplier × activeClientsCount
+
+  // أفضل مدرب
+  isTopPerformer        Boolean  @default(false)
+  topPerformerBonus     Float    @default(0)  // 1000 EGP إذا كان الأفضل
+
+  // الإجمالي الكلي
+  grandTotal            Float    @default(0)
+
+  // الحالة
+  status                String   @default("draft") // "draft", "finalized", "paid"
+  finalizedAt           DateTime?
+  paidAt                DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([coachId, month])
+  @@index([month, status])
+  @@index([isTopPerformer])
+}
+
+// تتبع استخدام حصص التغذية المجانية
+model FreeNutritionSessionUsage {
+  id           String   @id @default(cuid())
+  memberId     String
+  memberNumber Int?
+  memberName   String
+  memberPhone  String
+  usedAt       DateTime @default(now())
+  staffName    String?  // الموظف الذي سجل الاستخدام
+  notes        String?
+
+  @@index([memberId])
+  @@index([usedAt])
+  @@index([memberNumber])
+}
+
+// تتبع استخدام حصص العلاج الطبيعي المجانية
+model FreePhysiotherapySessionUsage {
+  id          String   @id @default(cuid())
+  memberId    String
+  memberName  String
+  memberPhone String
+  usedAt      DateTime @default(now())
+  staffName   String?  // الموظف الذي سجل الاستخدام
+  notes       String?
+
+  @@index([memberId])
+  @@index([usedAt])
+}

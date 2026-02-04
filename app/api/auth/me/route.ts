@@ -1,0 +1,46 @@
+// app/api/auth/me/route.ts
+import { NextResponse } from 'next/server'
+import { verifyAuth } from '../../../../lib/auth'
+import { prisma } from '../../../../lib/prisma'
+
+export async function GET(request: Request) {
+  try {
+    const user = await verifyAuth(request)
+
+    if (!user) {
+      return NextResponse.json(
+        { error: 'غير مصرح' },
+        { status: 401 }
+      )
+    }
+
+    // ✅ إذا كان المستخدم موظف، جلب الاسم من جدول Staff
+    let displayName = user.name
+    if (user.staffId) {
+      try {
+        const staff = await prisma.staff.findUnique({
+          where: { id: user.staffId }
+        })
+        if (staff?.name) {
+          displayName = staff.name
+          console.log(`✅ تم استخدام اسم الموظف من Staff: ${displayName}`)
+        }
+      } catch (error) {
+        console.error('⚠️ خطأ في جلب اسم الموظف من Staff:', error)
+      }
+    }
+
+    // إرجاع بيانات المستخدم مع الاسم المحدث
+    return NextResponse.json({
+      user: {
+        ...user,
+        name: displayName  // ✅ استخدام الاسم من Staff
+      }
+    })
+  } catch (error) {
+    return NextResponse.json(
+      { error: 'غير مصرح' },
+      { status: 401 }
+    )
+  }
+}
