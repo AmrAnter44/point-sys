@@ -55,6 +55,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No invitations remaining' }, { status: 400 })
     }
 
+    // التحقق من أن نفس الضيف لم يتم دعوته أكثر من مرتين (من أي عضو)
+    const previousInvitations = await prisma.invitation.count({
+      where: { guestPhone: guestPhone.trim() }
+    })
+
+    if (previousInvitations >= 2) {
+      return NextResponse.json(
+        { error: 'هذا الضيف تم دعوته بالفعل مرتين. لا يمكن دعوة نفس الشخص أكثر من مرتين.' },
+        { status: 400 }
+      )
+    }
+
     // إنشاء سجل الدعوة وتحديث عدد الدعوات في معاملة واحدة
     const [invitation, updatedMember] = await prisma.$transaction([
       prisma.invitation.create({

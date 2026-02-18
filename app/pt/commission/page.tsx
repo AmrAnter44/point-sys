@@ -24,6 +24,37 @@ interface CoachSummary {
   grandTotal: number
 }
 
+interface MRCBClient {
+  memberNumber: number
+  memberName: string
+  tier: string
+  subscriptionType: string
+  subscriptionPrice: number
+  monthNumber: number
+  mrcbAmount: number
+}
+
+interface OnboardingClient {
+  memberNumber: number
+  memberName: string
+  tier: string
+  subscriptionType: string
+  subscriptionPrice: number
+  amount: number
+}
+
+interface CoachDetails {
+  coachName: string
+  mrcb: {
+    total: number
+    activeClients: MRCBClient[]
+  }
+  onboarding: {
+    total: number
+    newClients: OnboardingClient[]
+  }
+}
+
 interface AllCoachesData {
   month: string
   totalCoaches: number
@@ -36,6 +67,10 @@ export default function CoachIncomePage() {
   const [selectedMonth, setSelectedMonth] = useState<string>('')
   const [allCoachesData, setAllCoachesData] = useState<AllCoachesData | null>(null)
   const [calculating, setCalculating] = useState(false)
+  const [selectedCoachDetails, setSelectedCoachDetails] = useState<CoachDetails | null>(null)
+  const [loadingDetails, setLoadingDetails] = useState(false)
+  const [settledCoaches, setSettledCoaches] = useState<Record<string, { paidAt: string; count: number }>>({})
+  const [settling, setSettling] = useState<string | null>(null) // coachId being settled
 
   // تحديد الشهر الحالي كافتراضي
   useEffect(() => {
@@ -59,14 +94,21 @@ export default function CoachIncomePage() {
 
     setCalculating(true)
     try {
-      const response = await fetch(`/api/commissions/all-coaches-income?month=${selectedMonth}`)
-      const data = await response.json()
+      const [incomeRes, settlementRes] = await Promise.all([
+        fetch(`/api/commissions/all-coaches-income?month=${selectedMonth}`),
+        fetch(`/api/commissions/settle?month=${selectedMonth}`)
+      ])
+      const data = await incomeRes.json()
+      const settlementData = await settlementRes.json()
 
-      if (!response.ok) {
+      if (!incomeRes.ok) {
         throw new Error(data.error || t('coachIncome.errorOccurred'))
       }
 
       setAllCoachesData(data)
+      if (settlementData.settled) {
+        setSettledCoaches(settlementData.settled)
+      }
     } catch (error: any) {
       console.error('Error calculating all coaches income:', error)
       alert(error.message || t('coachIncome.errorCalculating'))
@@ -75,11 +117,64 @@ export default function CoachIncomePage() {
     }
   }
 
+  const handleSettle = async (coachId: string, coachName: string) => {
+    if (!confirm(`تأكيد صرف الكوميشن لـ ${coachName} عن شهر ${selectedMonth}؟`)) return
+
+    setSettling(coachId)
+    try {
+      const res = await fetch('/api/commissions/settle', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ coachId, month: selectedMonth, coachName })
+      })
+      const data = await res.json()
+
+      if (res.ok) {
+        setSettledCoaches(prev => ({
+          ...prev,
+          [coachId]: { paidAt: new Date().toISOString(), count: data.updatedCount }
+        }))
+        alert(`✅ ${data.message}`)
+      } else {
+        alert(`❌ ${data.error}`)
+      }
+    } catch {
+      alert('❌ خطأ في الاتصال')
+    } finally {
+      setSettling(null)
+    }
+  }
+
   const formatCurrency = (amount: number) => {
     return amount.toLocaleString('en-US', {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
     })
+  }
+
+  const getSubscriptionLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      '1month': 'Challenger (1 شهر)',
+      '3months': 'Fighter (3 شهور)',
+      '6months': 'Champion (6 شهور)',
+      '1year': 'Elite (12 شهر)'
+    }
+    return labels[type] || type
+  }
+
+  const handleShowDetails = async (coachId: string) => {
+    setLoadingDetails(true)
+    try {
+      const response = await fetch(`/api/commissions/coach-income?coachId=${coachId}&month=${selectedMonth}`)
+      const data = await response.json()
+      if (response.ok) {
+        setSelectedCoachDetails(data)
+      }
+    } catch (error) {
+      console.error('Error fetching coach details:', error)
+    } finally {
+      setLoadingDetails(false)
+    }
   }
 
   return (
@@ -229,6 +324,7 @@ export default function CoachIncomePage() {
                     <th className="px-4 py-4 text-center font-bold">{t('coachIncome.ptRate')}</th>
                     <th className="px-4 py-4 text-center font-bold">{t('coachIncome.summary.totalCommissions')}</th>
                     <th className="px-4 py-4 text-center font-bold">{t('coachIncome.summary.grandTotal')}</th>
+                    <th className="px-4 py-4 text-center font-bold">💰 الصرف</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -263,6 +359,12 @@ export default function CoachIncomePage() {
                           ✅ {coach.serviceReferrals} Refs |
                           📈 {coach.membershipUpgrades} Ups
                         </div>
+                        <button
+                          onClick={() => handleShowDetails(coach.coachId)}
+                          className="mt-2 text-xs px-3 py-1 bg-blue-100 text-blue-700 rounded-full hover:bg-blue-200 transition font-semibold"
+                        >
+                          🔍 تفاصيل البونص
+                        </button>
                       </td>
 
                       {/* المرتب */}
@@ -334,6 +436,28 @@ export default function CoachIncomePage() {
                           {formatCurrency(coach.grandTotal)}
                         </div>
                       </td>
+
+                      {/* زر الصرف */}
+                      <td className="px-4 py-4 text-center">
+                        {settledCoaches[coach.coachId] ? (
+                          <div className="text-center">
+                            <span className="inline-block bg-green-100 text-green-700 text-xs font-bold px-3 py-1 rounded-full border border-green-300">
+                              ✅ تم الصرف
+                            </span>
+                            <p className="text-xs text-gray-400 mt-1">
+                              {new Date(settledCoaches[coach.coachId].paidAt).toLocaleDateString('ar-EG')}
+                            </p>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => handleSettle(coach.coachId, coach.coachName)}
+                            disabled={settling === coach.coachId}
+                            className="bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white text-xs font-bold px-3 py-2 rounded-lg transition"
+                          >
+                            {settling === coach.coachId ? '⏳...' : '💰 صرف'}
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -366,6 +490,9 @@ export default function CoachIncomePage() {
                     </td>
                     <td className="px-4 py-4 text-center text-green-600 text-2xl">
                       {formatCurrency(allCoachesData.coaches.reduce((sum, c) => sum + c.grandTotal, 0))}
+                    </td>
+                    <td className="px-4 py-4 text-center text-xs text-gray-500">
+                      {Object.keys(settledCoaches).length}/{allCoachesData.coaches.length} مصروف
                     </td>
                   </tr>
                 </tfoot>
@@ -446,6 +573,162 @@ export default function CoachIncomePage() {
           <p className="text-gray-500 text-xl text-center">
             {t('coachIncome.selectMonthAndRefresh')}
           </p>
+        </div>
+      )}
+
+      {/* Modal تفاصيل البونص */}
+      {(selectedCoachDetails || loadingDetails) && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setSelectedCoachDetails(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+
+            {/* Header */}
+            <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-black">🔍 تفاصيل البونص</h2>
+                {selectedCoachDetails && (
+                  <p className="text-blue-100 text-sm mt-1">{selectedCoachDetails.coachName} - {selectedMonth}</p>
+                )}
+              </div>
+              <button
+                onClick={() => setSelectedCoachDetails(null)}
+                className="text-white hover:text-blue-200 text-3xl font-bold leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            {loadingDetails ? (
+              <div className="flex items-center justify-center py-20">
+                <div className="text-6xl animate-bounce">⏳</div>
+              </div>
+            ) : selectedCoachDetails && (
+              <div className="p-6 space-y-6">
+
+                {/* MRCB Clients */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-bold text-blue-700">💰 MRCB - الكلاينتس النشطين</h3>
+                    <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm font-bold">
+                      إجمالي: {formatCurrency(selectedCoachDetails.mrcb.total)} ج.م
+                    </span>
+                  </div>
+
+                  {selectedCoachDetails.mrcb.activeClients.length === 0 ? (
+                    <p className="text-gray-400 text-center py-4">لا يوجد كلاينتس نشطين</p>
+                  ) : (
+                    <div className="overflow-x-auto rounded-xl border border-gray-200">
+                      <table className="w-full text-sm">
+                        <thead className="bg-blue-50">
+                          <tr>
+                            <th className="px-3 py-3 text-right font-bold text-gray-700">الكلاينت</th>
+                            <th className="px-3 py-3 text-center font-bold text-gray-700">نوع الاشتراك</th>
+                            <th className="px-3 py-3 text-center font-bold text-gray-700">مبلغ الاشتراك</th>
+                            <th className="px-3 py-3 text-center font-bold text-gray-700">الشهر الحالي</th>
+                            <th className="px-3 py-3 text-center font-bold text-gray-700">البونص</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedCoachDetails.mrcb.activeClients.map((client, idx) => (
+                            <tr key={idx} className="border-t hover:bg-gray-50">
+                              <td className="px-3 py-3">
+                                <div className="font-semibold">{client.memberName}</div>
+                                <div className="text-gray-400 text-xs">#{client.memberNumber}</div>
+                              </td>
+                              <td className="px-3 py-3 text-center">
+                                <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded-full text-xs font-semibold">
+                                  {getSubscriptionLabel(client.subscriptionType)}
+                                </span>
+                              </td>
+                              <td className="px-3 py-3 text-center font-semibold text-gray-800">
+                                {formatCurrency(client.subscriptionPrice)} ج.م
+                              </td>
+                              <td className="px-3 py-3 text-center">
+                                <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs font-bold">
+                                  شهر {client.monthNumber}
+                                </span>
+                              </td>
+                              <td className="px-3 py-3 text-center">
+                                <span className="text-green-600 font-bold text-base">
+                                  +{formatCurrency(client.mrcbAmount)} ج.م
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot className="bg-blue-50 font-bold">
+                          <tr>
+                            <td colSpan={4} className="px-3 py-3 text-right">الإجمالي</td>
+                            <td className="px-3 py-3 text-center text-blue-700 text-base">
+                              {formatCurrency(selectedCoachDetails.mrcb.total)} ج.م
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* Onboarding Clients */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-bold text-green-700">🎉 On-boarding - كلاينتس جدد</h3>
+                    <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-bold">
+                      إجمالي: {formatCurrency(selectedCoachDetails.onboarding.total)} ج.م
+                    </span>
+                  </div>
+
+                  {selectedCoachDetails.onboarding.newClients.length === 0 ? (
+                    <p className="text-gray-400 text-center py-4">لا يوجد كلاينتس جدد هذا الشهر</p>
+                  ) : (
+                    <div className="overflow-x-auto rounded-xl border border-gray-200">
+                      <table className="w-full text-sm">
+                        <thead className="bg-green-50">
+                          <tr>
+                            <th className="px-3 py-3 text-right font-bold text-gray-700">الكلاينت</th>
+                            <th className="px-3 py-3 text-center font-bold text-gray-700">نوع الاشتراك</th>
+                            <th className="px-3 py-3 text-center font-bold text-gray-700">مبلغ الاشتراك</th>
+                            <th className="px-3 py-3 text-center font-bold text-gray-700">البونص</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedCoachDetails.onboarding.newClients.map((client, idx) => (
+                            <tr key={idx} className="border-t hover:bg-gray-50">
+                              <td className="px-3 py-3">
+                                <div className="font-semibold">{client.memberName}</div>
+                                <div className="text-gray-400 text-xs">#{client.memberNumber}</div>
+                              </td>
+                              <td className="px-3 py-3 text-center">
+                                <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded-full text-xs font-semibold">
+                                  {getSubscriptionLabel(client.subscriptionType || '')}
+                                </span>
+                              </td>
+                              <td className="px-3 py-3 text-center font-semibold text-gray-800">
+                                {client.subscriptionPrice ? `${formatCurrency(client.subscriptionPrice)} ج.م` : '-'}
+                              </td>
+                              <td className="px-3 py-3 text-center">
+                                <span className="text-green-600 font-bold text-base">
+                                  +{formatCurrency(client.amount)} ج.م
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot className="bg-green-50 font-bold">
+                          <tr>
+                            <td colSpan={3} className="px-3 py-3 text-right">الإجمالي</td>
+                            <td className="px-3 py-3 text-center text-green-700 text-base">
+                              {formatCurrency(selectedCoachDetails.onboarding.total)} ج.م
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

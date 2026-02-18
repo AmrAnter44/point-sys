@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     const language = getLanguageFromRequest(request)
 
     const body = await request.json()
-    const { memberId, serviceType } = body
+    const { memberId, serviceType, physioStaffId } = body
 
     if (!memberId || !serviceType) {
       return NextResponse.json({
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     }
 
     // التحقق من نوع الخدمة
-    if (!['invitation', 'freePT', 'inBody', 'movementAssessment', 'nutrition', 'physiotherapy', 'onboarding', 'followUp', 'groupClass', 'pool', 'paddle'].includes(serviceType)) {
+    if (!['invitation', 'freePT', 'inBody', 'movementAssessment', 'nutrition', 'physiotherapy', 'onboarding', 'followUp', 'groupClass', 'pool', 'paddle', 'medicalScreening'].includes(serviceType)) {
       return NextResponse.json({
         error: language === 'ar' ? 'نوع خدمة غير صحيح' : 'Invalid service type'
       }, { status: 400 })
@@ -174,6 +174,17 @@ export async function POST(request: NextRequest) {
         }
         updateData = { paddleSessions: currentValue - 1 }
         break
+
+      case 'medicalScreening':
+        currentValue = member.medicalScreeningSessions
+        serviceName = language === 'ar' ? 'جلسة كشف طبي' : 'Medical Screening Session'
+        if (currentValue <= 0) {
+          return NextResponse.json({
+            error: language === 'ar' ? 'لا توجد جلسات كشف طبي متبقية' : 'No medical screening sessions remaining'
+          }, { status: 400 })
+        }
+        updateData = { medicalScreeningSessions: currentValue - 1 }
+        break
     }
 
     // تحديث بيانات العضو
@@ -181,6 +192,30 @@ export async function POST(request: NextRequest) {
       where: { id: memberId },
       data: updateData
     })
+
+    // 💰 عمولة الكشف الطبي: 50 جنيه للفيزيوثيرابيست
+    if (serviceType === 'medicalScreening' && physioStaffId) {
+      try {
+        await prisma.coachCommission.create({
+          data: {
+            coachId: physioStaffId,
+            type: 'medical_screening',
+            amount: 50,
+            month: new Date().toISOString().slice(0, 7),
+            status: 'pending',
+            notes: `كشف طبي - عضو: ${member.name} (${member.memberNumber})`,
+            calculationDetails: JSON.stringify({
+              memberId: member.id,
+              memberName: member.name,
+              memberNumber: member.memberNumber,
+              sessionFee: 50
+            })
+          }
+        })
+      } catch (err) {
+        console.error('فشل إنشاء عمولة الكشف الطبي:', err)
+      }
+    }
 
     return NextResponse.json({
       success: true,

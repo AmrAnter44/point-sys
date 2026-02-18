@@ -61,6 +61,14 @@ export default function AdminUsersPage() {
     onConfirm: () => void
   } | null>(null)
 
+  // State لـ Modal تغيير كلمة المرور
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const [passwordTargetUser, setPasswordTargetUser] = useState<User | null>(null)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showNewPw, setShowNewPw] = useState(false)
+  const [showConfirmPw, setShowConfirmPw] = useState(false)
+
   useEffect(() => {
     fetchUsers()
     fetchStaff()
@@ -230,16 +238,52 @@ export default function AdminUsersPage() {
   }
 
   const handleResetPassword = (user: User) => {
-    setConfirmAction({
-      title: `🔑 ${t('users.modals.resetPassword')}`,
-      message: t('users.modals.resetPasswordConfirm', { email: user.email }),
-      onConfirm: async () => {
-        setShowConfirmModal(false)
-        setMessage(`✅ ${t('users.messages.resetLinkSent')}`)
-        setTimeout(() => setMessage(''), 3000)
+    setPasswordTargetUser(user)
+    setNewPassword('')
+    setConfirmPassword('')
+    setShowPasswordModal(true)
+  }
+
+  const handleChangePassword = async () => {
+    if (!passwordTargetUser) return
+
+    if (newPassword.length < 6) {
+      setMessage('⚠️ كلمة المرور يجب أن تكون 6 أحرف على الأقل')
+      setTimeout(() => setMessage(''), 3000)
+      return
+    }
+
+    if (newPassword !== confirmPassword) {
+      setMessage('⚠️ كلمتا المرور غير متطابقتين')
+      setTimeout(() => setMessage(''), 3000)
+      return
+    }
+
+    setLoading(true)
+    try {
+      const response = await fetch(`/api/admin/users/${passwordTargetUser.id}/password`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newPassword })
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        setMessage(`✅ تم تغيير كلمة مرور ${passwordTargetUser.name} بنجاح`)
+        setShowPasswordModal(false)
+        setPasswordTargetUser(null)
+        setNewPassword('')
+        setConfirmPassword('')
+      } else {
+        setMessage(`❌ ${data.error || 'فشل تغيير كلمة المرور'}`)
       }
-    })
-    setShowConfirmModal(true)
+    } catch (error) {
+      setMessage('❌ حدث خطأ')
+    } finally {
+      setLoading(false)
+      setTimeout(() => setMessage(''), 4000)
+    }
   }
 
   const getRoleBadge = (role: string) => {
@@ -679,6 +723,103 @@ export default function AdminUsersPage() {
                 className="px-6 bg-gray-200 text-gray-700 py-3 rounded-lg hover:bg-gray-300 font-bold"
               >
                 {t('users.cancel')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: تغيير كلمة المرور */}
+      {showPasswordModal && passwordTargetUser && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h2 className="text-xl font-bold">🔑 تغيير كلمة المرور</h2>
+                <p className="text-sm text-gray-500 mt-1">{passwordTargetUser.name} — {passwordTargetUser.email}</p>
+              </div>
+              <button
+                onClick={() => setShowPasswordModal(false)}
+                className="text-gray-400 hover:text-gray-600 text-3xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  كلمة المرور الجديدة <span className="text-red-600">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type={showNewPw ? 'text' : 'password'}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full px-4 py-2 border-2 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 pl-10"
+                    placeholder="أدخل كلمة المرور الجديدة"
+                    dir="ltr"
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPw(!showNewPw)}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm"
+                  >
+                    {showNewPw ? '🙈' : '👁️'}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-400 mt-1">6 أحرف على الأقل</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  تأكيد كلمة المرور <span className="text-red-600">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type={showConfirmPw ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className={`w-full px-4 py-2 border-2 rounded-lg focus:ring-2 focus:ring-purple-500 pl-10 ${
+                      confirmPassword && confirmPassword !== newPassword
+                        ? 'border-red-400 focus:border-red-400 focus:ring-red-300'
+                        : 'focus:border-purple-500'
+                    }`}
+                    placeholder="أعد كتابة كلمة المرور"
+                    dir="ltr"
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPw(!showConfirmPw)}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm"
+                  >
+                    {showConfirmPw ? '🙈' : '👁️'}
+                  </button>
+                </div>
+                {confirmPassword && confirmPassword !== newPassword && (
+                  <p className="text-xs text-red-500 mt-1">كلمتا المرور غير متطابقتين</p>
+                )}
+                {confirmPassword && confirmPassword === newPassword && newPassword.length >= 6 && (
+                  <p className="text-xs text-green-600 mt-1">✅ كلمتا المرور متطابقتان</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={handleChangePassword}
+                disabled={loading || !newPassword || !confirmPassword}
+                className="flex-1 bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 disabled:bg-gray-400 font-bold"
+              >
+                {loading ? 'جاري الحفظ...' : '🔑 تغيير كلمة المرور'}
+              </button>
+              <button
+                onClick={() => setShowPasswordModal(false)}
+                className="px-6 bg-gray-200 text-gray-700 py-3 rounded-lg hover:bg-gray-300 font-bold"
+              >
+                إلغاء
               </button>
             </div>
           </div>

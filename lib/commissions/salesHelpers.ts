@@ -12,15 +12,21 @@ export async function isSalesStaff(staffId: string): Promise<boolean> {
     select: { name: true, position: true, isActive: true }
   })
 
+  const isSales = staff?.isActive === true && (
+    staff?.position?.includes('ريسبشن') ||
+    staff?.position?.toLowerCase().includes('reception') ||
+    staff?.position?.includes('مبيعات')
+  )
+
   console.log(`🔍 فحص إذا كان موظف مبيعات:`, {
     staffId,
     name: staff?.name,
     position: staff?.position,
     isActive: staff?.isActive,
-    isSales: staff?.isActive === true && staff?.position === 'ريسبشن'
+    isSales
   })
 
-  return staff?.isActive === true && staff?.position === 'ريسبشن'
+  return isSales === true
 }
 
 /**

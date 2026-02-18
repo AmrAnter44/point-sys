@@ -67,6 +67,20 @@ export async function validateLicense(): Promise<{
   data: LicenseData | null
 }> {
   console.log('🔍 Starting license validation...')
+
+  // تعطيل فحص الترخيص في بيئة التطوير
+  const isDevelopment = process.env.NODE_ENV === 'development'
+  const skipLicenseCheck = process.env.SKIP_LICENSE_CHECK === 'true'
+
+  if (isDevelopment && skipLicenseCheck) {
+    console.log('⚠️  License check SKIPPED (development mode)')
+    return {
+      isValid: true,
+      message: 'Development mode - License check bypassed',
+      data: { enabled: true, sig: 'dev-mode' }
+    }
+  }
+
   const data = await fetchLicenseData()
 
   if (!data) {
@@ -83,6 +97,19 @@ export async function validateLicense(): Promise<{
 
   if (!sigValid) {
     console.log('❌ License signature validation FAILED')
+
+    // في بيئة التطوير، نسمح بالمتابعة حتى لو فشل التوقيع
+    if (isDevelopment) {
+      console.log('⚠️  Signature mismatch ignored in development mode')
+      if (data.enabled) {
+        return {
+          isValid: true,
+          message: 'Development mode - Signature validation bypassed',
+          data: data
+        }
+      }
+    }
+
     return {
       isValid: false,
       message: 'License signature is invalid. Please contact support.',

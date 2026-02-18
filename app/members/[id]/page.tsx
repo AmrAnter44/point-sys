@@ -43,6 +43,8 @@ interface Member {
   groupClasses?: number
   poolSessions?: number
   paddleSessions?: number
+  medicalScreeningSessions?: number
+  birthdate?: string | null
   freezingDays?: number
   upgradeAllowedDays?: number
   isFrozen?: boolean
@@ -53,6 +55,12 @@ interface Member {
     id: string
     name: string
     staffCode: string
+  } | null
+  referringCoach?: {
+    id: string
+    name: string
+    staffCode: string
+    position: string
   } | null
 }
 
@@ -96,6 +104,21 @@ export default function MemberDetailPage() {
   const [showRedemptionModal, setShowRedemptionModal] = useState(false)
   const [nutritionPackages, setNutritionPackages] = useState<any[]>([])
   const [physioPackages, setPhysioPackages] = useState<any[]>([])
+  const [coaches, setCoaches] = useState<any[]>([])
+  const [changeCoachData, setChangeCoachData] = useState({
+    newCoachId: '',
+    reason: ''
+  })
+  const [salesStaff, setSalesStaff] = useState<any[]>([])
+  const [selectedSalespersonId, setSelectedSalespersonId] = useState('')
+  const [salespersonLoading, setSalespersonLoading] = useState(false)
+  const [selectedPhysioId, setSelectedPhysioId] = useState('')
+  const [physioStaff, setPhysioStaff] = useState<any[]>([])
+
+  const [manualPointsData, setManualPointsData] = useState({
+    points: 0,
+    reason: ''
+  })
 
   const [confirmModal, setConfirmModal] = useState<{
     show: boolean
@@ -149,6 +172,7 @@ export default function MemberDetailPage() {
     groupClasses: 0,
     poolSessions: 0,
     paddleSessions: 0,
+    medicalScreeningSessions: 0,
     freezingDays: 0,
     monthlyAttendanceGoal: 0,
     upgradeAllowedDays: 0
@@ -239,6 +263,185 @@ export default function MemberDetailPage() {
     }
   }
 
+  const fetchCoaches = async () => {
+    try {
+      const response = await fetch('/api/coaches')
+      const data = await response.json()
+      if (Array.isArray(data)) {
+        setCoaches(data)
+      }
+    } catch (error) {
+      console.error('Error fetching coaches:', error)
+      setCoaches([])
+    }
+  }
+
+  const fetchSalesStaff = async () => {
+    try {
+      const response = await fetch('/api/staff')
+      const data = await response.json()
+      if (Array.isArray(data)) {
+        // فلترة موظفي المبيعات (ريسبشن)
+        const sales = data.filter((s: any) => s.position?.includes('ريسبشن') || s.isSalesStaff || s.role === 'SALES')
+        setSalesStaff(sales.length > 0 ? sales : data) // لو مفيش ريسبشن، نعرض الكل
+        // فلترة موظفي الفيزيوثيرابي
+        const physio = data.filter((s: any) =>
+          s.position?.includes('فيزيو') ||
+          s.position?.toLowerCase().includes('physio') ||
+          s.position?.includes('علاج طبيعي')
+        )
+        setPhysioStaff(physio.length > 0 ? physio : data)
+      }
+    } catch (error) {
+      console.error('Error fetching sales staff:', error)
+    }
+  }
+
+  const handleChangeSalesperson = async () => {
+    if (!member) return
+    setSalespersonLoading(true)
+    try {
+      const res = await fetch('/api/members/change-salesperson', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memberId: member.id, newSalespersonId: selectedSalespersonId || null })
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setMessage('✅ تم تغيير موظف المبيعات بنجاح')
+        setActiveModal(null)
+        fetchMember()
+      } else {
+        setMessage(`❌ ${data.error || 'فشل التغيير'}`)
+      }
+    } catch {
+      setMessage('❌ خطأ في الاتصال')
+    } finally {
+      setSalespersonLoading(false)
+      setTimeout(() => setMessage(''), 3000)
+    }
+  }
+
+  const handleChangeCoach = async () => {
+    if (!member) {
+      setMessage('⚠️ لم يتم العثور على بيانات العضو')
+      setTimeout(() => setMessage(''), 3000)
+      return
+    }
+
+    setLoading(true)
+    setMessage('')
+
+    try {
+      const response = await fetch('/api/members/change-coach', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          memberId: member.id,
+          newCoachId: changeCoachData.newCoachId || null,
+          reason: changeCoachData.reason.trim()
+        })
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        setMessage(`✅ ${result.message}`)
+        setTimeout(() => setMessage(''), 3000)
+        setChangeCoachData({ newCoachId: '', reason: '' })
+        setActiveModal(null)
+        fetchMember()
+      } else {
+        setMessage(`❌ ${result.error || 'فشل تغيير المدرب'}`)
+        setTimeout(() => setMessage(''), 3000)
+      }
+    } catch (error) {
+      console.error(error)
+      setMessage('❌ خطأ في الاتصال بالخادم')
+      setTimeout(() => setMessage(''), 3000)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleManualPoints = async () => {
+    if (!member) {
+      setMessage('⚠️ لم يتم العثور على بيانات العضو')
+      setTimeout(() => setMessage(''), 3000)
+      return
+    }
+
+    if (manualPointsData.points === 0) {
+      setMessage('⚠️ يجب إدخال عدد النقاط')
+      setTimeout(() => setMessage(''), 3000)
+      return
+    }
+
+    if (!manualPointsData.reason.trim()) {
+      setMessage('⚠️ يجب إدخال سبب التعديل')
+      setTimeout(() => setMessage(''), 3000)
+      return
+    }
+
+    setLoading(true)
+    setMessage('')
+
+    try {
+      const response = await fetch('/api/loyalty/manual-points', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          memberId: member.id,
+          points: parseInt(manualPointsData.points.toString()),
+          reason: manualPointsData.reason.trim()
+        })
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        setMessage(`✅ ${result.message}`)
+        setTimeout(() => setMessage(''), 3000)
+        setManualPointsData({ points: 0, reason: '' })
+        setActiveModal(null)
+        fetchLoyalty()
+      } else {
+        setMessage(`❌ ${result.error || 'فشل تحديث النقاط'}`)
+        setTimeout(() => setMessage(''), 3000)
+      }
+    } catch (error) {
+      console.error(error)
+      setMessage('❌ خطأ في الاتصال بالخادم')
+      setTimeout(() => setMessage(''), 3000)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleAwardBirthdayPoints = async () => {
+    if (!member) return
+    setLoading(true)
+    setMessage('')
+    try {
+      const response = await fetch('/api/loyalty/birthday-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memberId: member.id })
+      })
+      const data = await response.json()
+      if (response.ok) {
+        setMessage(`✅ ${data.message}`)
+        fetchLoyalty()
+      } else {
+        setMessage(`❌ ${data.error}`)
+      }
+    } catch (error) {
+      setMessage('❌ حدث خطأ')
+    } finally {
+      setLoading(false)
+      setTimeout(() => setMessage(''), 4000)
+    }
+  }
 
   const fetchPTSubscription = async () => {
     if (!member) return
@@ -306,6 +509,8 @@ export default function MemberDetailPage() {
     fetchLoyalty()
     fetchNutritionPackages()
     fetchPhysioPackages()
+    fetchCoaches()
+    fetchSalesStaff()
   }, [memberId])
 
   useEffect(() => {
@@ -802,6 +1007,49 @@ export default function MemberDetailPage() {
     })
   }
 
+  const handleUseMedicalScreeningSession = async () => {
+    if (!member || (member.medicalScreeningSessions ?? 0) <= 0) {
+      setMessage('⚠️ لا توجد جلسات كشف طبي متبقية')
+      setTimeout(() => setMessage(''), 3000)
+      return
+    }
+
+    setConfirmModal({
+      show: true,
+      title: '🩺 استخدام جلسة كشف طبي',
+      message: `استخدام جلسة كشف طبي للعضو "${member.name}"؟ ستُضاف عمولة 50 جنيه للفيزيوثيرابيست.`,
+      onConfirm: async () => {
+        setConfirmModal(null)
+        setLoading(true)
+        try {
+          const response = await fetch('/api/members/deduct-service', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              memberId: member.id,
+              serviceType: 'medicalScreening',
+              physioStaffId: selectedPhysioId || undefined
+            })
+          })
+          const data = await response.json()
+          if (response.ok) {
+            setMessage(`✅ ${data.message}`)
+            setTimeout(() => setMessage(''), 3000)
+            fetchMember()
+          } else {
+            setMessage(`❌ ${data.error || 'حدث خطأ'}`)
+            setTimeout(() => setMessage(''), 3000)
+          }
+        } catch (error) {
+          setMessage('❌ حدث خطأ في الاتصال')
+          setTimeout(() => setMessage(''), 3000)
+        } finally {
+          setLoading(false)
+        }
+      }
+    })
+  }
+
   const handleUseFreezingDay = async () => {
     if (!member || (member.freezingDays ?? 0) <= 0) {
       setMessage(t('memberDetails.useFreezingDaysModal.noDaysAvailable'))
@@ -960,6 +1208,7 @@ export default function MemberDetailPage() {
           groupClasses: parseInt(editBasicInfoData.groupClasses.toString()),
           poolSessions: parseInt(editBasicInfoData.poolSessions.toString()),
           paddleSessions: parseInt(editBasicInfoData.paddleSessions.toString()),
+          medicalScreeningSessions: parseInt(editBasicInfoData.medicalScreeningSessions.toString()),
           freezingDays: parseInt(editBasicInfoData.freezingDays.toString()),
           monthlyAttendanceGoal: parseInt(editBasicInfoData.monthlyAttendanceGoal.toString()),
           upgradeAllowedDays: parseInt(editBasicInfoData.upgradeAllowedDays.toString())
@@ -993,6 +1242,7 @@ export default function MemberDetailPage() {
           groupClasses: 0,
           poolSessions: 0,
           paddleSessions: 0,
+          medicalScreeningSessions: 0,
           freezingDays: 0,
           monthlyAttendanceGoal: 0,
           upgradeAllowedDays: 0
@@ -1342,6 +1592,7 @@ export default function MemberDetailPage() {
                       groupClasses: member.groupClasses ?? 0,
                       poolSessions: member.poolSessions ?? 0,
                       paddleSessions: member.paddleSessions ?? 0,
+                      medicalScreeningSessions: member.medicalScreeningSessions ?? 0,
                       freezingDays: member.freezingDays ?? 0,
                       monthlyAttendanceGoal: member.monthlyAttendanceGoal ?? 0,
                       upgradeAllowedDays: member.upgradeAllowedDays ?? 0
@@ -1386,12 +1637,58 @@ export default function MemberDetailPage() {
             </div>
           )}
           <div>
-            <p className="text-xs opacity-90 mb-1">👨‍🏫 {t('memberDetails.assignedCoach')}</p>
+            <div className="flex items-center gap-2 mb-1">
+              <p className="text-xs opacity-90">👨‍🏫 {t('memberDetails.assignedCoach')}</p>
+              {hasPermission('canEditMembers') && (
+                <button
+                  onClick={() => {
+                    setChangeCoachData({
+                      newCoachId: member.assignedCoach?.id || '',
+                      reason: ''
+                    })
+                    setActiveModal('change-coach')
+                  }}
+                  className="text-white hover:text-blue-200 transition-colors"
+                  title="تغيير المدرب"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                  </svg>
+                </button>
+              )}
+            </div>
             <p className="text-base md:text-lg font-bold truncate">
               {member.assignedCoach ? member.assignedCoach.name : '---'}
             </p>
             {member.assignedCoach && (
               <p className="text-xs opacity-75">#{member.assignedCoach.staffCode}</p>
+            )}
+          </div>
+
+          {/* موظف المبيعات المسؤول */}
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <p className="text-xs opacity-90">💼 موظف المبيعات</p>
+              {hasPermission('canEditMembers') && (
+                <button
+                  onClick={() => {
+                    setSelectedSalespersonId(member.referringCoach?.id || '')
+                    setActiveModal('change-salesperson')
+                  }}
+                  className="text-white hover:text-yellow-200 transition-colors"
+                  title="تغيير موظف المبيعات"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            <p className="text-base md:text-lg font-bold truncate">
+              {member.referringCoach ? member.referringCoach.name : '---'}
+            </p>
+            {member.referringCoach && (
+              <p className="text-xs opacity-75">{member.referringCoach.position}</p>
             )}
           </div>
         </div>
@@ -1615,6 +1912,36 @@ export default function MemberDetailPage() {
             {t('memberDetails.packageBenefits.use')}
           </button>
         </div>
+
+        {/* جلسات الكشف الطبي */}
+        {(member.medicalScreeningSessions ?? 0) > 0 && (
+          <div className="bg-white rounded-lg shadow-md p-3 border-r-4 border-purple-400">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <p className="text-gray-600 text-xs">كشف طبي</p>
+                <p className="text-2xl font-bold text-purple-600">{member.medicalScreeningSessions ?? 0}</p>
+              </div>
+              <div className="text-3xl">🩺</div>
+            </div>
+            <select
+              value={selectedPhysioId}
+              onChange={(e) => setSelectedPhysioId(e.target.value)}
+              className="w-full border rounded text-xs px-1 py-1 mb-1"
+            >
+              <option value="">اختر الفيزيوثيرابيست (اختياري)</option>
+              {physioStaff.map((s: any) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+            <button
+              onClick={handleUseMedicalScreeningSession}
+              disabled={(member.medicalScreeningSessions ?? 0) <= 0 || loading}
+              className="w-full bg-purple-500 text-white py-1.5 px-2 rounded text-xs hover:bg-purple-600 disabled:bg-gray-400 disabled:cursor-not-allowed"
+            >
+              استخدام (50 جنيه للفيزيو)
+            </button>
+          </div>
+        )}
 
         <div className="bg-white rounded-lg shadow-md p-3 border-r-4 border-red-400">
           <div className="flex items-center justify-between mb-2">
@@ -1909,7 +2236,7 @@ export default function MemberDetailPage() {
             ⭐ {t('memberDetails.loyaltyPoints.manualGrant')}
           </h3>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
             {/* Goal Achievement Button */}
             <button
               onClick={() => setActiveModal('goal-achievement')}
@@ -1947,6 +2274,53 @@ export default function MemberDetailPage() {
                 <div className="text-3xl">📝</div>
               </div>
             </button>
+
+            {/* Birthday Points Button - Admin Only */}
+            {hasPermission('canManageLoyaltyPoints') && member?.birthdate && (
+              <button
+                onClick={handleAwardBirthdayPoints}
+                disabled={loading}
+                className={`p-3 rounded-lg shadow transition-all ${
+                  loyalty?.lastBirthdayReward && new Date(loyalty.lastBirthdayReward).getFullYear() === new Date().getFullYear()
+                    ? 'bg-gray-300 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-pink-500 to-rose-600 text-white hover:shadow-lg'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="text-right">
+                    <p className="font-bold text-sm">
+                      🎂 نقاط عيد الميلاد
+                      {loyalty?.lastBirthdayReward && new Date(loyalty.lastBirthdayReward).getFullYear() === new Date().getFullYear() && ' ✓'}
+                    </p>
+                    <p className="text-xs opacity-90">
+                      {loyalty?.lastBirthdayReward && new Date(loyalty.lastBirthdayReward).getFullYear() === new Date().getFullYear()
+                        ? 'تم منحه هذا العام'
+                        : '+250 نقطة (يدوي)'}
+                    </p>
+                  </div>
+                  <div className="text-3xl">🎁</div>
+                </div>
+              </button>
+            )}
+
+            {/* Manual Points Button - Admin Only */}
+            {hasPermission('canManageLoyaltyPoints') && (
+              <button
+                onClick={() => {
+                  setManualPointsData({ points: 0, reason: '' })
+                  setActiveModal('manual-points')
+                }}
+                className="bg-gradient-to-r from-orange-500 to-red-600 text-white p-3 rounded-lg shadow hover:shadow-lg transition-all"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="text-right">
+                    <p className="font-bold text-sm">✍️ تعديل يدوي</p>
+                    <p className="text-xs text-white/90">إضافة/خصم نقاط</p>
+                  </div>
+                  <div className="text-3xl">⚙️</div>
+                </div>
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -2601,6 +2975,20 @@ export default function MemberDetailPage() {
 
                   <div>
                     <label className="block text-xs font-medium mb-0.5">
+                      🩺 جلسات الكشف الطبي
+                    </label>
+                    <input
+                      type="number"
+                      value={editBasicInfoData.medicalScreeningSessions || ''}
+                      onChange={(e) => setEditBasicInfoData({ ...editBasicInfoData, medicalScreeningSessions: parseInt(e.target.value) || 0 })}
+                      className="w-full px-2 py-1 border-2 rounded-lg focus:outline-none focus:border-blue-500 text-sm"
+                      placeholder="0"
+                      min="0"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium mb-0.5">
                       ❄️ أيام التجميد
                     </label>
                     <input
@@ -2794,8 +3182,262 @@ export default function MemberDetailPage() {
         </div>
       )}
 
+      {/* Modal: تغيير المدرب */}
+      {activeModal === 'change-coach' && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4"
+          style={{ zIndex: 9999 }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setActiveModal(null)
+              setChangeCoachData({ newCoachId: '', reason: '' })
+            }
+          }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()} dir={direction}>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-2xl font-bold flex items-center gap-2">
+                <span>🏋️</span>
+                <span>تغيير المدرب</span>
+              </h3>
+              <button
+                onClick={() => {
+                  setActiveModal(null)
+                  setChangeCoachData({ newCoachId: '', reason: '' })
+                }}
+                className="text-gray-400 hover:text-gray-600 text-3xl leading-none"
+                type="button"
+              >
+                ×
+              </button>
+            </div>
 
+            <div className={`bg-blue-50 ${direction === 'rtl' ? 'border-r-4' : 'border-l-4'} border-blue-500 p-4 rounded-lg mb-6`}>
+              <p className="font-bold text-blue-800">
+                العضو: {member.name} (#{member.memberNumber})
+              </p>
+              <p className="text-sm text-blue-700 mt-1">
+                المدرب الحالي: {member.assignedCoach ? member.assignedCoach.name : 'بدون مدرب'}
+              </p>
+            </div>
 
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold mb-2">المدرب الجديد</label>
+                <select
+                  value={changeCoachData.newCoachId}
+                  onChange={(e) => setChangeCoachData({ ...changeCoachData, newCoachId: e.target.value })}
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                >
+                  <option value="">بدون مدرب (إزالة المدرب)</option>
+                  {coaches.map((coach) => (
+                    <option key={coach.id} value={coach.id}>
+                      {coach.name} ({coach.staffCode})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold mb-2">السبب (اختياري)</label>
+                <textarea
+                  value={changeCoachData.reason}
+                  onChange={(e) => setChangeCoachData({ ...changeCoachData, reason: e.target.value })}
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none resize-none"
+                  rows={3}
+                  placeholder="اكتب سبب تغيير المدرب..."
+                />
+              </div>
+
+              <div className={`bg-orange-50 ${direction === 'rtl' ? 'border-r-4' : 'border-l-4'} border-orange-500 p-4 rounded-lg`}>
+                <p className="text-sm text-orange-800">
+                  <strong>ملاحظة:</strong> العمولات الشهرية المستقبلية (MRCB) ستُحول للمدرب الجديد. العمولات السابقة ستبقى للمدرب القديم.
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={handleChangeCoach}
+                  disabled={loading}
+                  className="flex-1 bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-bold"
+                >
+                  {loading ? 'جاري التغيير...' : 'تأكيد التغيير'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveModal(null)
+                    setChangeCoachData({ newCoachId: '', reason: '' })
+                  }}
+                  className="px-6 bg-gray-200 text-gray-700 py-3 rounded-lg hover:bg-gray-300"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: تغيير موظف المبيعات */}
+      {activeModal === 'change-salesperson' && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4"
+          style={{ zIndex: 9999 }}
+          onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null) }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()} dir={direction}>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-2xl font-bold flex items-center gap-2">
+                <span>💼</span>
+                <span>تغيير موظف المبيعات</span>
+              </h3>
+              <button onClick={() => setActiveModal(null)} className="text-gray-400 hover:text-gray-600 text-3xl leading-none" type="button">×</button>
+            </div>
+
+            <div className={`bg-yellow-50 ${direction === 'rtl' ? 'border-r-4' : 'border-l-4'} border-yellow-500 p-4 rounded-lg mb-6`}>
+              <p className="font-bold text-yellow-800">العضو: {member.name} (#{member.memberNumber})</p>
+              <p className="text-sm text-yellow-700 mt-1">
+                موظف المبيعات الحالي: {member.referringCoach ? member.referringCoach.name : 'غير محدد'}
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold mb-2">موظف المبيعات الجديد</label>
+                <select
+                  value={selectedSalespersonId}
+                  onChange={(e) => setSelectedSalespersonId(e.target.value)}
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-yellow-500 focus:outline-none"
+                >
+                  <option value="">بدون موظف مبيعات</option>
+                  {salesStaff.map((s: any) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} {s.position ? `(${s.position})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={handleChangeSalesperson}
+                  disabled={salespersonLoading}
+                  className="flex-1 bg-yellow-600 text-white py-3 rounded-lg hover:bg-yellow-700 disabled:bg-gray-400 font-bold"
+                >
+                  {salespersonLoading ? 'جاري التغيير...' : 'تأكيد التغيير'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveModal(null)}
+                  className="px-6 bg-gray-200 text-gray-700 py-3 rounded-lg hover:bg-gray-300"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: إضافة نقاط يدوياً */}
+      {activeModal === 'manual-points' && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4"
+          style={{ zIndex: 9999 }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setActiveModal(null)
+              setManualPointsData({ points: 0, reason: '' })
+            }
+          }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()} dir={direction}>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-2xl font-bold flex items-center gap-2">
+                <span>⚙️</span>
+                <span>تعديل النقاط يدوياً</span>
+              </h3>
+              <button
+                onClick={() => {
+                  setActiveModal(null)
+                  setManualPointsData({ points: 0, reason: '' })
+                }}
+                className="text-gray-400 hover:text-gray-600 text-3xl leading-none"
+                type="button"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className={`bg-orange-50 ${direction === 'rtl' ? 'border-r-4' : 'border-l-4'} border-orange-500 p-4 rounded-lg mb-6`}>
+              <p className="font-bold text-orange-800">
+                العضو: {member.name} (#{member.memberNumber})
+              </p>
+              <p className="text-sm text-orange-700 mt-1">
+                الرصيد الحالي: {loyalty?.pointsBalance || 0} نقطة
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold mb-2">
+                  عدد النقاط
+                  <span className="text-xs font-normal text-gray-600"> (أدخل رقم موجب للإضافة أو سالب للخصم)</span>
+                </label>
+                <input
+                  type="number"
+                  value={manualPointsData.points}
+                  onChange={(e) => setManualPointsData({ ...manualPointsData, points: parseInt(e.target.value) || 0 })}
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-orange-500 focus:outline-none"
+                  placeholder="مثال: 100 للإضافة، -50 للخصم"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold mb-2">السبب *</label>
+                <textarea
+                  value={manualPointsData.reason}
+                  onChange={(e) => setManualPointsData({ ...manualPointsData, reason: e.target.value })}
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-orange-500 focus:outline-none resize-none"
+                  rows={3}
+                  placeholder="اكتب سبب تعديل النقاط..."
+                  required
+                />
+              </div>
+
+              <div className={`bg-blue-50 ${direction === 'rtl' ? 'border-r-4' : 'border-l-4'} border-blue-500 p-4 rounded-lg`}>
+                <p className="text-sm text-blue-800">
+                  <strong>ملاحظة:</strong> سيتم تسجيل هذا التعديل في سجل المعاملات مع السبب المذكور.
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={handleManualPoints}
+                  disabled={loading || manualPointsData.points === 0 || !manualPointsData.reason.trim()}
+                  className="flex-1 bg-orange-600 text-white py-3 rounded-lg hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-bold"
+                >
+                  {loading ? 'جاري التعديل...' : 'تأكيد التعديل'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveModal(null)
+                    setManualPointsData({ points: 0, reason: '' })
+                  }}
+                  className="px-6 bg-gray-200 text-gray-700 py-3 rounded-lg hover:bg-gray-300"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Goal Achievement Modal */}
       {activeModal === 'goal-achievement' && (

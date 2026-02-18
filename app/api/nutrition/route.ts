@@ -150,6 +150,31 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    // 💰 عمولة الكوتش على الباقة المدفوعة
+    // 30% لو الكلاينت عضو في الجيم، 50% لو من برة أو الكوتش باع بنفسه
+    if (referringCoachId) {
+      const isMember = !!memberId
+      const commissionRate = isMember ? 0.30 : 0.50
+      const commissionAmount = calculateUpsellCommission(pricing.finalPrice, 'nutrition', isMember)
+
+      await prisma.coachCommission.create({
+        data: {
+          coachId: referringCoachId,
+          memberId: memberId || null,
+          type: 'upsell_nutrition',
+          amount: commissionAmount,
+          receiptId: receipt.id,
+          month: new Date().toISOString().slice(0, 7),
+          calculationDetails: JSON.stringify({
+            packageType,
+            baseAmount: pricing.finalPrice,
+            rate: commissionRate,
+            clientType: isMember ? 'member' : 'outside',
+          })
+        }
+      })
+    }
+
     // 💰 Create sales renewal bonus if applicable
     if (isRenewal) {
       try {
@@ -169,27 +194,6 @@ export async function POST(request: NextRequest) {
         // Don't fail package creation if bonus creation fails
         console.error('⚠️ Sales bonus error (non-critical):', salesBonusError)
       }
-    }
-
-    // Create commission record if coach referred this sale
-    if (referringCoachId) {
-      const upsellAmount = calculateUpsellCommission(pricing.finalPrice, 'nutrition')
-
-      await prisma.coachCommission.create({
-        data: {
-          coachId: referringCoachId,
-          type: 'upsell_nutrition',
-          amount: upsellAmount,
-          receiptId: receipt.id,
-          month: new Date().toISOString().slice(0, 7),
-          calculationDetails: JSON.stringify({
-            packageType,
-            baseAmount: pricing.finalPrice,
-            rate: 0.05,
-            duration: pricing.packageDetails.duration
-          })
-        }
-      })
     }
 
     if (memberId) {

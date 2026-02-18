@@ -58,7 +58,8 @@ export async function GET(request: NextRequest) {
           select: {
             memberNumber: true,
             name: true,
-            subscriptionType: true
+            subscriptionType: true,
+            subscriptionPrice: true
           }
         }
       }
@@ -69,6 +70,8 @@ export async function GET(request: NextRequest) {
       memberNumber: c.member?.memberNumber,
       memberName: c.member?.name,
       tier: c.type.replace('onboarding_', ''),
+      subscriptionType: c.member?.subscriptionType,
+      subscriptionPrice: c.member?.subscriptionPrice,
       amount: c.amount
     }))
 
@@ -84,6 +87,7 @@ export async function GET(request: NextRequest) {
         memberNumber: true,
         name: true,
         subscriptionType: true,
+        subscriptionPrice: true,
         startDate: true,
         expiryDate: true
       }
@@ -129,6 +133,8 @@ export async function GET(request: NextRequest) {
           memberNumber: client.memberNumber,
           memberName: client.name,
           tier: getTierName(subscriptionMonths),
+          subscriptionType: client.subscriptionType,
+          subscriptionPrice: client.subscriptionPrice,
           monthNumber: currentMonth,
           mrcbAmount: mrcbAmount
         })
@@ -268,33 +274,24 @@ export async function GET(request: NextRequest) {
     const performanceBonus = performanceMultiplier * activeClientsCount
 
     // ===== 5. Upsell Commissions =====
-    // Physio
+    // Physio (40% من السعر)
     const physioCommissions = await prisma.coachCommission.findMany({
       where: {
         coachId: coachId,
         month: month,
-        type: 'physio_referral'
+        type: 'upsell_physio'
       }
     })
     const physioTotal = physioCommissions.reduce((sum, c) => sum + c.amount, 0)
     const physioCount = physioCommissions.length
+    const physioRevenue = physioTotal / 0.40
 
-    // Calculate revenue from commission (commission = 5% of revenue, so revenue = commission / 0.05)
-    const physioRevenue = physioTotal / 0.05
+    // Nutrition - لا عمولة على مبيعات النيوتريشن، فقط 30 جنيه على السيشنات المجانية
+    const nutritionTotal = 0
+    const nutritionCount = 0
+    const nutritionRevenue = 0
 
-    // Nutrition
-    const nutritionCommissions = await prisma.coachCommission.findMany({
-      where: {
-        coachId: coachId,
-        month: month,
-        type: 'nutrition_referral'
-      }
-    })
-    const nutritionTotal = nutritionCommissions.reduce((sum, c) => sum + c.amount, 0)
-    const nutritionCount = nutritionCommissions.length
-    const nutritionRevenue = nutritionTotal / 0.05
-
-    // Upgrades
+    // Upgrades (5% من السعر)
     const upgradeCommissions = await prisma.coachCommission.findMany({
       where: {
         coachId: coachId,
@@ -306,7 +303,29 @@ export async function GET(request: NextRequest) {
     const upgradeCount = upgradeCommissions.length
     const upgradeRevenue = upgradeTotal / 0.05
 
-    const upsellsTotal = physioTotal + nutritionTotal + upgradeTotal
+    // Free Nutrition Sessions (30 جنيه لكل سيشن)
+    const freeNutritionCommissions = await prisma.coachCommission.findMany({
+      where: {
+        coachId: coachId,
+        month: month,
+        type: 'nutrition_free_session'
+      }
+    })
+    const freeNutritionTotal = freeNutritionCommissions.reduce((sum, c) => sum + c.amount, 0)
+    const freeNutritionCount = freeNutritionCommissions.length
+
+    // Medical Screening (50 جنيه لكل جلسة)
+    const medicalScreeningCommissions = await prisma.coachCommission.findMany({
+      where: {
+        coachId: coachId,
+        month: month,
+        type: 'medical_screening'
+      }
+    })
+    const medicalScreeningTotal = medicalScreeningCommissions.reduce((sum, c) => sum + c.amount, 0)
+    const medicalScreeningCount = medicalScreeningCommissions.length
+
+    const upsellsTotal = physioTotal + nutritionTotal + upgradeTotal + freeNutritionTotal + medicalScreeningTotal
 
     // ===== 6. PT Sessions =====
     // حساب جميع إيرادات PT من الإيصالات في هذا الشهر (عند الشراء)
@@ -469,7 +488,9 @@ export async function GET(request: NextRequest) {
         total: upsellsTotal,
         physio: { count: physioCount, revenue: physioRevenue, commission: physioTotal },
         nutrition: { count: nutritionCount, revenue: nutritionRevenue, commission: nutritionTotal },
-        upgrades: { count: upgradeCount, revenue: upgradeRevenue, commission: upgradeTotal }
+        upgrades: { count: upgradeCount, revenue: upgradeRevenue, commission: upgradeTotal },
+        freeNutritionSessions: { count: freeNutritionCount, commission: freeNutritionTotal },
+        medicalScreening: { count: medicalScreeningCount, commission: medicalScreeningTotal }
       },
 
       pt: {

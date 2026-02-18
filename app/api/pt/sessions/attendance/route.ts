@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '../../../../../lib/prisma'
 import { requirePermission } from '../../../../../lib/auth'
+import { recordSessionAttendance } from '../../../../../lib/loyaltySystem'
 
 /**
  * POST - تسجيل حضور حصة PT باستخدام Barcode/رقم PT
@@ -96,6 +97,22 @@ export async function POST(request: Request) {
     })
 
     console.log(`✅ تم تسجيل حضور ${pt.clientName} بنجاح (الحصص المتبقية: ${pt.sessionsRemaining - 1})`)
+
+    // 🏅 منح 25 نقطة ولاء - البحث عن العضو عن طريق الهاتف
+    if (pt.phone) {
+      try {
+        const memberRecord = await prisma.member.findFirst({
+          where: { phone: pt.phone },
+          select: { id: true }
+        })
+        if (memberRecord) {
+          await recordSessionAttendance(memberRecord.id, 'pt', user.name || 'System')
+          console.log(`✅ تم منح 25 نقطة PT للعضو: ${pt.clientName}`)
+        }
+      } catch (pointsError) {
+        console.error('⚠️ خطأ في منح نقاط PT (غير حرج):', pointsError)
+      }
+    }
 
     return NextResponse.json({
       success: true,

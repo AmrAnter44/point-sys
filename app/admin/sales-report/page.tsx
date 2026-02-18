@@ -223,10 +223,20 @@ export default function AdminSalesReportPage() {
                     <th className="px-4 py-3 text-right text-sm font-semibold">
                       {direction === 'rtl' ? 'البونصات' : 'Bonuses'}
                     </th>
+                    <th className="px-4 py-3 text-center text-sm font-semibold">
+                      % كوميشن
+                    </th>
+                    <th className="px-4 py-3 text-right text-sm font-semibold">
+                      تفصيل البونص
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {report.staffReports.map((staff, index) => (
+                  {report.staffReports.map((staff, index) => {
+                    const commissionRate = staff.totalRevenue > 0
+                      ? ((staff.bonuses.total / staff.totalRevenue) * 100).toFixed(1)
+                      : '0.0'
+                    return (
                     <tr key={staff.staffId} className={`${
                       index === 0 ? 'bg-yellow-50 font-bold' : 'hover:bg-gray-50'
                     }`}>
@@ -246,8 +256,24 @@ export default function AdminSalesReportPage() {
                       <td className="px-4 py-3 text-green-600 font-bold">
                         {staff.bonuses.total.toFixed(0)} ج.م
                       </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                          parseFloat(commissionRate) >= 5 ? 'bg-green-100 text-green-700' :
+                          parseFloat(commissionRate) >= 2 ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-gray-100 text-gray-600'
+                        }`}>
+                          {commissionRate}%
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-500">
+                        <div>تجديد: {staff.bonuses.renewalBonuses.toFixed(0)} ج.م</div>
+                        {staff.bonuses.topAchieverBase > 0 && (
+                          <div>Top: {staff.bonuses.topAchieverBase.toFixed(0)} ج.م</div>
+                        )}
+                      </td>
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

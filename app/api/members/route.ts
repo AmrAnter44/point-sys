@@ -18,6 +18,7 @@ import {
   getRenewalTypeFromOffer,
   getRenewalTypeFromMonths
 } from '../../../lib/commissions/salesRenewal'
+import { logActivity, ACTIONS, RESOURCES } from '../../../lib/activityLog'
 
 // 🔧 دالة للبحث عن رقم إيصال متاح (integers فقط)
 async function getNextAvailableReceiptNumber(startingNumber: number): Promise<number> {
@@ -79,11 +80,10 @@ export async function GET(request: Request) {
       include: {
         receipts: true,
         assignedCoach: {
-          select: {
-            id: true,
-            name: true,
-            staffCode: true
-          }
+          select: { id: true, name: true, staffCode: true }
+        },
+        referringCoach: {
+          select: { id: true, name: true, staffCode: true, position: true }
         }
       }
     })
@@ -127,7 +127,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     // ✅ التحقق من صلاحية إضافة عضو
-    await requirePermission(request, 'canCreateMembers')
+    const currentUser = await requirePermission(request, 'canCreateMembers')
     
     const body = await request.json()
     const {
@@ -162,6 +162,7 @@ export async function POST(request: Request) {
       groupClasses,
       poolSessions,
       paddleSessions,
+      medicalScreeningSessions,
       freezingDays,
       upgradeAllowedDays,
       referredById,      // ⭐ معرف العضو المُحيل
@@ -227,6 +228,7 @@ export async function POST(request: Request) {
     const cleanGroupClasses = parseInt((groupClasses || 0).toString())
     const cleanPoolSessions = parseInt((poolSessions || 0).toString())
     const cleanPaddleSessions = parseInt((paddleSessions || 0).toString())
+    const cleanMedicalScreeningSessions = parseInt((medicalScreeningSessions || 0).toString())
     const cleanFreezingDays = parseInt((freezingDays || 0).toString())
     const cleanUpgradeAllowedDays = parseInt((upgradeAllowedDays || 0).toString())
 
@@ -331,6 +333,7 @@ export async function POST(request: Request) {
       groupClasses: cleanGroupClasses,
       poolSessions: cleanPoolSessions,
       paddleSessions: cleanPaddleSessions,
+      medicalScreeningSessions: cleanMedicalScreeningSessions,
       freezingDays: cleanFreezingDays,
       upgradeAllowedDays: cleanUpgradeAllowedDays,
       referredById: referredById || null,      // ⭐ ربط العضو المُحيل
@@ -590,7 +593,14 @@ export async function POST(request: Request) {
       // ⭐ منح نقاط الشراء
       if (cleanSubscriptionPrice > 0) {
         try {
-          const purchasePoints = calculatePurchasePoints(cleanSubscriptionPrice)
+          // حساب مدة الاشتراك لتحديد النقاط المناسبة
+          let newMemberDurationDays: number | undefined = undefined
+          if (startDate && expiryDate) {
+            newMemberDurationDays = Math.ceil(
+              (new Date(expiryDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)
+            )
+          }
+          const purchasePoints = calculatePurchasePoints(cleanSubscriptionPrice, newMemberDurationDays)
 
           if (purchasePoints > 0) {
             await earnPoints({
@@ -639,6 +649,20 @@ export async function POST(request: Request) {
     } else {
       console.log('🚫 تم تخطي إنشاء الإيصال (skipReceipt = true)')
     }
+
+    // 📋 تسجيل النشاط
+    logActivity({
+      userId: currentUser.userId,
+      action: ACTIONS.CREATE,
+      resource: RESOURCES.MEMBER,
+      resourceId: member.id,
+      details: JSON.stringify({
+        memberName: member.name,
+        memberNumber: member.memberNumber,
+        offerName: offerName || member.currentOfferName,
+        staffName: staffName?.trim()
+      })
+    })
 
     return NextResponse.json({
       success: true,
@@ -728,6 +752,9 @@ export async function PUT(request: Request) {
     if (data.paddleSessions !== undefined) {
       updateData.paddleSessions = parseInt(data.paddleSessions.toString())
     }
+    if (data.medicalScreeningSessions !== undefined) {
+      updateData.medicalScreeningSessions = parseInt(data.medicalScreeningSessions.toString())
+    }
     if (data.freezingDays !== undefined) {
       updateData.freezingDays = parseInt(data.freezingDays.toString())
     }
@@ -813,8 +840,8 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   try {
     // ✅ التحقق من صلاحية حذف عضو
-    await requirePermission(request, 'canDeleteMembers')
-    
+    const delUser = await requirePermission(request, 'canDeleteMembers')
+
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 
@@ -822,7 +849,25 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'رقم العضو مطلوب' }, { status: 400 })
     }
 
+    const memberToDelete = await prisma.member.findUnique({
+      where: { id },
+      select: { name: true, memberNumber: true }
+    })
+
     await prisma.member.delete({ where: { id } })
+
+    // 📋 تسجيل النشاط
+    logActivity({
+      userId: delUser.userId,
+      action: ACTIONS.DELETE,
+      resource: RESOURCES.MEMBER,
+      resourceId: id,
+      details: JSON.stringify({
+        memberName: memberToDelete?.name,
+        memberNumber: memberToDelete?.memberNumber
+      })
+    })
+
     return NextResponse.json({ message: 'تم الحذف بنجاح' })
   } catch (error: any) {
     console.error('Error deleting member:', error)

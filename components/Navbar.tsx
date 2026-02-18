@@ -527,16 +527,28 @@ export default function Navbar() {
                         {/* Menu Items */}
                         <div className="py-2">
                           {user.role === 'ADMIN' && (
-                            <Link
-                              href="/admin/users"
-                              onClick={() => setShowUserMenu(false)}
-                              className={`px-4 py-3 text-gray-700 hover:bg-orange-50/80 transition-all flex items-center gap-2 ${
-                                locale === 'ar' ? 'hover:translate-x-1' : 'hover:-translate-x-1'
-                              }`}
-                            >
-                              <span>👥</span>
-                              <span>{t('auth.manageUsers')}</span>
-                            </Link>
+                            <>
+                              <Link
+                                href="/admin/users"
+                                onClick={() => setShowUserMenu(false)}
+                                className={`px-4 py-3 text-gray-700 hover:bg-orange-50/80 transition-all flex items-center gap-2 ${
+                                  locale === 'ar' ? 'hover:translate-x-1' : 'hover:-translate-x-1'
+                                }`}
+                              >
+                                <span>👥</span>
+                                <span>{t('auth.manageUsers')}</span>
+                              </Link>
+                              <Link
+                                href="/admin/activity-log"
+                                onClick={() => setShowUserMenu(false)}
+                                className={`px-4 py-3 text-gray-700 hover:bg-orange-50/80 transition-all flex items-center gap-2 ${
+                                  locale === 'ar' ? 'hover:translate-x-1' : 'hover:-translate-x-1'
+                                }`}
+                              >
+                                <span>📋</span>
+                                <span>سجل النشاط</span>
+                              </Link>
+                            </>
                           )}
 
                           <button
@@ -637,14 +649,24 @@ export default function Navbar() {
                   </div>
 
                   {user.role === 'ADMIN' && (
-                    <Link
-                      href="/admin/users"
-                      onClick={() => setShowDrawer(false)}
-                      className="flex items-center gap-2 px-3 py-2 text-gray-700 hover:bg-gray-200 rounded-lg transition mb-2"
-                    >
-                      <span>👥</span>
-                      <span className="text-sm">{t('auth.manageUsers')}</span>
-                    </Link>
+                    <>
+                      <Link
+                        href="/admin/users"
+                        onClick={() => setShowDrawer(false)}
+                        className="flex items-center gap-2 px-3 py-2 text-gray-700 hover:bg-gray-200 rounded-lg transition mb-2"
+                      >
+                        <span>👥</span>
+                        <span className="text-sm">{t('auth.manageUsers')}</span>
+                      </Link>
+                      <Link
+                        href="/admin/activity-log"
+                        onClick={() => setShowDrawer(false)}
+                        className="flex items-center gap-2 px-3 py-2 text-gray-700 hover:bg-gray-200 rounded-lg transition mb-2"
+                      >
+                        <span>📋</span>
+                        <span className="text-sm">سجل النشاط</span>
+                      </Link>
+                    </>
                   )}
 
                   <button

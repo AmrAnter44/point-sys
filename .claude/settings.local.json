@@ -27,7 +27,10 @@
       "Bash(node scripts/clean-member-ids.js:*)",
       "Bash(del scriptsclean-member-ids.js)",
       "Bash(node -e:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(ls:*)",
+      "Bash(/Users/amranter200444/Downloads/Gyms/point/point-sys/app/api/coaches/route.ts:*)",
+      "Bash(\"/Users/amranter200444/Downloads/Gyms/point/point-sys/app/api/loyalty/birthday-check/route.ts\":*)"
     ]
   }
 }

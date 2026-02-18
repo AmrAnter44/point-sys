@@ -48,7 +48,8 @@ model Member {
   followUpSessions      Int      @default(0)
   groupClasses          Int      @default(0)
   poolSessions          Int      @default(0)
-  paddleSessions        Int      @default(0)
+  paddleSessions             Int      @default(0)
+  medicalScreeningSessions   Int      @default(0)
   freezingDays          Int      @default(0)
   upgradeAllowedDays    Int      @default(0)
   attendanceLimit       Int      @default(0)  // حد الحضور (0 = غير محدود)
@@ -87,6 +88,7 @@ model MemberCheckIn {
   id                    String    @id @default(cuid())
   memberId              String
   checkInTime           DateTime  @default(now())
+  checkOutTime          DateTime?
   checkInMethod         String    @default("scan")
 
   member                Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
@@ -421,7 +423,8 @@ model Offer {
   followUpSessions      Int      @default(0) // جلسات المتابعة
   groupClasses          Int      @default(0) // الحصص الجماعية
   poolSessions          Int      @default(0) // جلسات المسبح
-  paddleSessions        Int      @default(0) // جلسات البادل
+  paddleSessions             Int      @default(0) // جلسات البادل
+  medicalScreeningSessions   Int      @default(0) // جلسات الكشف الطبي
   freezingDays          Int      @default(0) // أيام التجميد
   attendanceLimit       Int      @default(0) // حد الحضور (0 = غير محدود)
   icon                  String   @default("📅")

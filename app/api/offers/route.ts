@@ -44,6 +44,7 @@ export async function POST(request: Request) {
       groupClasses,
       poolSessions,
       paddleSessions,
+      medicalScreeningSessions,
       freezingDays,
       attendanceLimit,
       icon
@@ -74,6 +75,7 @@ export async function POST(request: Request) {
         groupClasses: parseInt(groupClasses) || 0,
         poolSessions: parseInt(poolSessions) || 0,
         paddleSessions: parseInt(paddleSessions) || 0,
+        medicalScreeningSessions: parseInt(medicalScreeningSessions) || 0,
         freezingDays: parseInt(freezingDays) || 0,
         attendanceLimit: parseInt(attendanceLimit) || 0,
         icon: icon || '📅'
@@ -126,6 +128,7 @@ export async function PUT(request: Request) {
       groupClasses,
       poolSessions,
       paddleSessions,
+      medicalScreeningSessions,
       freezingDays,
       attendanceLimit,
       icon
@@ -156,6 +159,7 @@ export async function PUT(request: Request) {
     if (groupClasses !== undefined) updateData.groupClasses = parseInt(groupClasses)
     if (poolSessions !== undefined) updateData.poolSessions = parseInt(poolSessions)
     if (paddleSessions !== undefined) updateData.paddleSessions = parseInt(paddleSessions)
+    if (medicalScreeningSessions !== undefined) updateData.medicalScreeningSessions = parseInt(medicalScreeningSessions)
     if (freezingDays !== undefined) updateData.freezingDays = parseInt(freezingDays)
     if (attendanceLimit !== undefined) updateData.attendanceLimit = parseInt(attendanceLimit)
     if (icon !== undefined) updateData.icon = icon

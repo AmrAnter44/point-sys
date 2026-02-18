@@ -113,6 +113,25 @@ export async function POST(request: NextRequest) {
       }
     })
 
+    // 💰 عمولة الكوتش المعين - 30 جنيه لكل سيشن مجاني
+    if (member.assignedCoachId) {
+      const currentMonth = new Date().toISOString().slice(0, 7)
+      await prisma.coachCommission.create({
+        data: {
+          coachId: member.assignedCoachId,
+          memberId: member.id,
+          type: 'nutrition_free_session',
+          amount: 30,
+          month: currentMonth,
+          calculationDetails: JSON.stringify({
+            memberName: member.name,
+            sessionType: 'free_nutrition',
+            amount: 30
+          })
+        }
+      })
+    }
+
     return NextResponse.json({
       success: true,
       usage,

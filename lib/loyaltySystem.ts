@@ -86,9 +86,17 @@ export function convertPointsToEGP(points: number): number {
 // ==================== Point Calculation ====================
 
 /**
- * حساب نقاط الشراء: 1 نقطة لكل 10 جنيه
+ * حساب نقاط الشراء: مبالغ ثابتة حسب مدة الاشتراك
+ * 1 سنة = 1000 نقطة، 6 شهور = 500، 3 شهور = 250، 1 شهر = 100
+ * fallback: 1 نقطة لكل 10 جنيه
  */
-export function calculatePurchasePoints(amountPaid: number): number {
+export function calculatePurchasePoints(amountPaid: number, offerDurationDays?: number): number {
+  if (offerDurationDays !== undefined) {
+    if (offerDurationDays > 185) return 1000  // سنة
+    if (offerDurationDays > 95)  return 500   // 6 شهور
+    if (offerDurationDays > 35)  return 250   // 3 شهور
+    return 100                                 // شهر
+  }
   return Math.floor(amountPaid / 10)
 }
 

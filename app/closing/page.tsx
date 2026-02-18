@@ -11,6 +11,7 @@ interface DailyData {
   pt: number
   nutrition: number
   physiotherapy: number
+  bar: number
   expenses: number
   expenseDetails: string
   visa: number
@@ -37,6 +38,7 @@ interface MonthlyData {
   pt: number
   nutrition: number
   physiotherapy: number
+  bar: number
 }
 
 export default function ClosingPage() {
@@ -63,6 +65,7 @@ export default function ClosingPage() {
     pt: 0,
     nutrition: 0,
     physiotherapy: 0,
+    bar: 0,
     expenses: 0,
     visa: 0,
     instapay: 0,
@@ -72,6 +75,12 @@ export default function ClosingPage() {
     totalRevenue: 0,
     netProfit: 0
   })
+
+  // Bar income form state
+  const [showBarForm, setShowBarForm] = useState(false)
+  const [barFormData, setBarFormData] = useState({ amount: '', note: '', date: new Date().toISOString().split('T')[0] })
+  const [barFormLoading, setBarFormLoading] = useState(false)
+  const [barFormMessage, setBarFormMessage] = useState('')
 
   const { t, direction } = useLanguage()
 
@@ -124,6 +133,7 @@ export default function ClosingPage() {
             pt: 0,
             nutrition: 0,
             physiotherapy: 0,
+            bar: 0,
             expenses: 0,
             expenseDetails: '',
             visa: 0,
@@ -150,6 +160,9 @@ export default function ClosingPage() {
           } else if (receipt.type === 'Physiotherapy' || receipt.type === 'Physiotherapy Renewal') {
             // Physiotherapy sessions
             dailyMap[date].physiotherapy += receipt.amount
+          } else if (receipt.type === 'Bar') {
+            // Bar income
+            dailyMap[date].bar += receipt.amount
           } else {
             // كل شيء آخر (عضويات، تجديدات، خدمات، الخ...)
             dailyMap[date].floor += receipt.amount
@@ -183,6 +196,7 @@ export default function ClosingPage() {
             pt: 0,
             nutrition: 0,
             physiotherapy: 0,
+            bar: 0,
             expenses: 0,
             expenseDetails: '',
             visa: 0,
@@ -223,6 +237,7 @@ export default function ClosingPage() {
         acc.pt += day.pt
         acc.nutrition += day.nutrition
         acc.physiotherapy += day.physiotherapy
+        acc.bar += day.bar
         acc.expenses += day.expenses
         acc.visa += day.visa
         acc.instapay += day.instapay
@@ -234,6 +249,7 @@ export default function ClosingPage() {
         pt: 0,
         nutrition: 0,
         physiotherapy: 0,
+        bar: 0,
         expenses: 0,
         visa: 0,
         instapay: 0,
@@ -245,7 +261,7 @@ export default function ClosingPage() {
       })
 
       newTotals.totalPayments = newTotals.cash + newTotals.visa + newTotals.instapay + newTotals.wallet
-      newTotals.totalRevenue = newTotals.floor + newTotals.pt + newTotals.nutrition + newTotals.physiotherapy
+      newTotals.totalRevenue = newTotals.floor + newTotals.pt + newTotals.nutrition + newTotals.physiotherapy + newTotals.bar
       newTotals.netProfit = newTotals.totalRevenue - newTotals.expenses
 
       setTotals(newTotals)
@@ -296,7 +312,8 @@ export default function ClosingPage() {
             floor: 0,
             pt: 0,
             nutrition: 0,
-            physiotherapy: 0
+            physiotherapy: 0,
+            bar: 0
           }
         }
 
@@ -307,6 +324,8 @@ export default function ClosingPage() {
           monthlyMap[monthKey].nutrition += receipt.amount
         } else if (receipt.type === 'Physiotherapy' || receipt.type === 'Physiotherapy Renewal') {
           monthlyMap[monthKey].physiotherapy += receipt.amount
+        } else if (receipt.type === 'Bar') {
+          monthlyMap[monthKey].bar += receipt.amount
         } else {
           monthlyMap[monthKey].floor += receipt.amount
         }
@@ -338,7 +357,8 @@ export default function ClosingPage() {
             floor: 0,
             pt: 0,
             nutrition: 0,
-            physiotherapy: 0
+            physiotherapy: 0,
+            bar: 0
           }
         }
 
@@ -363,6 +383,7 @@ export default function ClosingPage() {
         acc.pt += month.pt
         acc.nutrition += month.nutrition
         acc.physiotherapy += month.physiotherapy
+        acc.bar += month.bar
         acc.totalRevenue += month.totalRevenue
         acc.expenses += month.totalExpenses
         return acc
@@ -371,6 +392,7 @@ export default function ClosingPage() {
         pt: 0,
         nutrition: 0,
         physiotherapy: 0,
+        bar: 0,
         expenses: 0,
         visa: 0,
         instapay: 0,
@@ -420,6 +442,7 @@ export default function ClosingPage() {
         t('closing.table.pt'),
         'Nutrition 🥗',
         'Physiotherapy 🏥',
+        'Bar 🍵',
         t('closing.table.cash'),
         t('closing.table.visa'),
         t('closing.table.instapay'),
@@ -455,6 +478,7 @@ export default function ClosingPage() {
           day.pt > 0 ? day.pt : 0,
           day.nutrition > 0 ? day.nutrition : 0,
           day.physiotherapy > 0 ? day.physiotherapy : 0,
+          day.bar > 0 ? day.bar : 0,
           day.cash > 0 ? day.cash : 0,
           day.visa > 0 ? day.visa : 0,
           day.instapay > 0 ? day.instapay : 0,
@@ -496,6 +520,7 @@ export default function ClosingPage() {
         totals.pt,
         totals.nutrition,
         totals.physiotherapy,
+        totals.bar,
         totals.cash,
         totals.visa,
         totals.instapay,
@@ -881,6 +906,96 @@ export default function ClosingPage() {
             </p>
           </div>
 
+          {/* Bar Income Quick Entry */}
+          <div className="bg-yellow-50 border-2 border-yellow-300 rounded-xl p-4 mb-4 no-print">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-bold text-yellow-900 flex items-center gap-2">
+                <span>🍵</span>
+                <span>إضافة إيراد البار</span>
+              </h3>
+              <button
+                onClick={() => setShowBarForm(!showBarForm)}
+                className="text-sm bg-yellow-500 text-white px-3 py-1 rounded hover:bg-yellow-600"
+              >
+                {showBarForm ? 'إغلاق' : '+ إضافة'}
+              </button>
+            </div>
+            {showBarForm && (
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+                <div>
+                  <label className="block text-xs font-medium mb-1 text-yellow-800">التاريخ</label>
+                  <input
+                    type="date"
+                    value={barFormData.date}
+                    onChange={(e) => setBarFormData({ ...barFormData, date: e.target.value })}
+                    className="w-full border-2 border-yellow-300 rounded px-2 py-1 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1 text-yellow-800">المبلغ (ج.م)</label>
+                  <input
+                    type="number"
+                    value={barFormData.amount}
+                    onChange={(e) => setBarFormData({ ...barFormData, amount: e.target.value })}
+                    className="w-full border-2 border-yellow-300 rounded px-2 py-1 text-sm"
+                    placeholder="0"
+                    min="0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1 text-yellow-800">ملاحظة (اختياري)</label>
+                  <input
+                    type="text"
+                    value={barFormData.note}
+                    onChange={(e) => setBarFormData({ ...barFormData, note: e.target.value })}
+                    className="w-full border-2 border-yellow-300 rounded px-2 py-1 text-sm"
+                    placeholder="مبيعات البار..."
+                  />
+                </div>
+                <div>
+                  <button
+                    onClick={async () => {
+                      if (!barFormData.amount || parseFloat(barFormData.amount) <= 0) return
+                      setBarFormLoading(true)
+                      try {
+                        const res = await fetch('/api/bar-income', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            amount: parseFloat(barFormData.amount),
+                            note: barFormData.note,
+                            date: barFormData.date
+                          })
+                        })
+                        if (res.ok) {
+                          setBarFormMessage('✅ تم تسجيل إيراد البار')
+                          setBarFormData({ amount: '', note: '', date: new Date().toISOString().split('T')[0] })
+                          setShowBarForm(false)
+                          fetchData()
+                        } else {
+                          const err = await res.json()
+                          setBarFormMessage(`❌ ${err.error}`)
+                        }
+                      } catch {
+                        setBarFormMessage('❌ حدث خطأ')
+                      } finally {
+                        setBarFormLoading(false)
+                        setTimeout(() => setBarFormMessage(''), 3000)
+                      }
+                    }}
+                    disabled={barFormLoading || !barFormData.amount}
+                    className="w-full bg-yellow-500 text-white py-1.5 rounded hover:bg-yellow-600 disabled:bg-gray-400 text-sm font-bold"
+                  >
+                    {barFormLoading ? '...' : 'حفظ'}
+                  </button>
+                </div>
+              </div>
+            )}
+            {barFormMessage && (
+              <p className="text-sm mt-2 font-medium">{barFormMessage}</p>
+            )}
+          </div>
+
           {/* Summary Cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 no-print">
             <div className="bg-gradient-to-br from-green-500 to-green-600 text-white p-4 rounded-lg shadow-lg">
@@ -918,6 +1033,10 @@ export default function ClosingPage() {
             <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white p-4 rounded-lg shadow-lg">
               <p className="text-sm opacity-90">Physiotherapy 🏥</p>
               <p className="text-3xl font-bold">{totals.physiotherapy.toFixed(0)}</p>
+            </div>
+            <div className="bg-gradient-to-br from-yellow-500 to-amber-600 text-white p-4 rounded-lg shadow-lg">
+              <p className="text-sm opacity-90">Bar 🍵</p>
+              <p className="text-3xl font-bold">{totals.bar.toFixed(0)}</p>
             </div>
             <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white p-4 rounded-lg shadow-lg">
               <p className="text-sm opacity-90">{t('closing.stats.numberOfDays')}</p>
@@ -1006,13 +1125,19 @@ export default function ClosingPage() {
                             <p className="text-sm opacity-90">Physio 🏥</p>
                             <p className="text-xl font-bold">{day.physiotherapy > 0 ? day.physiotherapy.toFixed(0) : '0'} {t('closing.currency')}</p>
                           </div>
+                          {day.bar > 0 && (
+                            <div className="bg-white/20 p-3 rounded-lg">
+                              <p className="text-sm opacity-90">Bar 🍵</p>
+                              <p className="text-xl font-bold">{day.bar.toFixed(0)} {t('closing.currency')}</p>
+                            </div>
+                          )}
                           <div className="bg-white/20 p-3 rounded-lg">
                             <p className="text-sm opacity-90">{t('closing.table.expenses')}</p>
                             <p className="text-xl font-bold">{day.expenses > 0 ? day.expenses.toFixed(0) : '0'} {t('closing.currency')}</p>
                           </div>
                           <div className="bg-white/20 p-3 rounded-lg">
                             <p className="text-sm opacity-90">{t('closing.table.total')}</p>
-                            <p className="text-xl font-bold">{((day.floor + day.pt + day.nutrition + day.physiotherapy) - day.expenses).toFixed(0)} {t('closing.currency')}</p>
+                            <p className="text-xl font-bold">{((day.floor + day.pt + day.nutrition + day.physiotherapy + day.bar) - day.expenses).toFixed(0)} {t('closing.currency')}</p>
                           </div>
                         </div>
                       </div>

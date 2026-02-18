@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
           groupClasses: 0,
           poolSessions: 0,
           paddleSessions: 0,
+          medicalScreeningSessions: 0,
           freezingDays: 0,
           icon: '🥉',
           isActive: true
@@ -55,6 +56,7 @@ export async function POST(request: NextRequest) {
           groupClasses: 0,
           poolSessions: 0,
           paddleSessions: 0,
+          medicalScreeningSessions: 1,
           freezingDays: 15,
           icon: '🥊',
           isActive: true
@@ -76,6 +78,7 @@ export async function POST(request: NextRequest) {
           groupClasses: 0,
           poolSessions: 6,
           paddleSessions: 2,
+          medicalScreeningSessions: 2,
           freezingDays: 30,
           icon: '🏆',
           isActive: true
@@ -97,6 +100,7 @@ export async function POST(request: NextRequest) {
           groupClasses: 0,
           poolSessions: 999, // Unlimited
           paddleSessions: 8,
+          medicalScreeningSessions: 4,
           freezingDays: 90,
           icon: '👑',
           isActive: true

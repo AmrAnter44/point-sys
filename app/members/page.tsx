@@ -29,11 +29,22 @@ interface Member {
   isFrozen?: boolean
   createdAt: string
   currentOfferName?: string | null
+  assignedCoach?: {
+    id: string
+    name: string
+    staffCode: string
+  } | null
 }
 
 interface Offer {
   id: string
   name: string
+}
+
+interface Coach {
+  id: string
+  name: string
+  staffCode: string
 }
 
 export default function MembersPage() {
@@ -48,6 +59,8 @@ export default function MembersPage() {
   const [loading, setLoading] = useState(true)
   const [offers, setOffers] = useState<Offer[]>([])
   const [offersLoading, setOffersLoading] = useState(true)
+  const [coaches, setCoaches] = useState<Coach[]>([])
+  const [coachesLoading, setCoachesLoading] = useState(true)
 
   // سجل الحضور
   const [showAttendanceModal, setShowAttendanceModal] = useState(false)
@@ -67,8 +80,11 @@ export default function MembersPage() {
   const [searchPhone, setSearchPhone] = useState('')
 
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'expired' | 'expiring-soon'>('all')
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false)
+  const [whatsAppMessage, setWhatsAppMessage] = useState('السلام عليكم، نذكركم بأن اشتراككم في الجيم قد انتهى أو على وشك الانتهاء. تواصلوا معنا لتجديد اشتراككم.')
   const [specificDate, setSpecificDate] = useState('')
   const [filterOffer, setFilterOffer] = useState('')
+  const [filterCoach, setFilterCoach] = useState('')
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1)
@@ -133,6 +149,22 @@ export default function MembersPage() {
     }
   }
 
+  const fetchCoaches = async () => {
+    try {
+      const response = await fetch('/api/coaches')
+      const data = await response.json()
+
+      if (Array.isArray(data)) {
+        setCoaches(data)
+      }
+    } catch (error) {
+      console.error('Error fetching coaches:', error)
+      setCoaches([])
+    } finally {
+      setCoachesLoading(false)
+    }
+  }
+
   const fetchAttendanceSummary = async () => {
     setAttendanceLoading(true)
     try {
@@ -158,6 +190,7 @@ export default function MembersPage() {
   useEffect(() => {
     fetchMembers()
     fetchOffers()
+    fetchCoaches()
   }, [])
 
   useEffect(() => {
@@ -219,9 +252,15 @@ export default function MembersPage() {
       })
     }
 
+    if (filterCoach) {
+      filtered = filtered.filter((member) => {
+        return member.assignedCoach?.id === filterCoach
+      })
+    }
+
     setFilteredMembers(filtered)
     setCurrentPage(1) // إعادة تعيين الصفحة للأولى عند الفلترة
-  }, [searchId, searchName, searchPhone, filterStatus, specificDate, filterOffer, members])
+  }, [searchId, searchName, searchPhone, filterStatus, specificDate, filterOffer, filterCoach, members])
 
   // حساب الصفحات
   const totalPages = Math.ceil(filteredMembers.length / itemsPerPage)
@@ -251,6 +290,7 @@ export default function MembersPage() {
     setFilterStatus('all')
     setSpecificDate('')
     setFilterOffer('')
+    setFilterCoach('')
   }
 
   // دالة للتحقق من حالة التجميد وحساب الأيام المتبقية
@@ -369,12 +409,13 @@ export default function MembersPage() {
             <span>🎯</span>
             <span>{t('members.quickFilters')}</span>
           </h3>
-          {(filterStatus !== 'all' || specificDate || filterOffer) && (
+          {(filterStatus !== 'all' || specificDate || filterOffer || filterCoach) && (
             <button
               onClick={() => {
                 setFilterStatus('all')
                 setSpecificDate('')
                 setFilterOffer('')
+                setFilterCoach('')
               }}
               className="bg-purple-100 text-purple-600 px-4 py-2 rounded-lg hover:bg-purple-200 text-sm font-medium"
             >
@@ -489,6 +530,40 @@ export default function MembersPage() {
             </p>
           )}
         </div>
+
+        <div className="border-t pt-4">
+          <label className="block text-sm font-medium mb-2">
+            🏋️ فلتر حسب المدرب
+          </label>
+          <div className="flex gap-2">
+            <select
+              value={filterCoach}
+              onChange={(e) => setFilterCoach(e.target.value)}
+              className="flex-1 px-3 py-2 md:px-4 md:py-3 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none transition"
+              disabled={coachesLoading}
+            >
+              <option value="">جميع المدربين</option>
+              {coaches.map((coach) => (
+                <option key={coach.id} value={coach.id}>
+                  {coach.name}
+                </option>
+              ))}
+            </select>
+            {filterCoach && (
+              <button
+                onClick={() => setFilterCoach('')}
+                className="px-4 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+              >
+                ✖️
+              </button>
+            )}
+          </div>
+          {filterCoach && (
+            <p className="text-sm text-purple-600 mt-2">
+              🔍 عرض الأعضاء المشتركين مع: {coaches.find(c => c.id === filterCoach)?.name}
+            </p>
+          )}
+        </div>
       </div>
 
       <div className="bg-white p-6 rounded-xl shadow-lg mb-6 border-2 border-orange-200">
@@ -551,8 +626,8 @@ export default function MembersPage() {
         )}
       </div>
 
-      {(searchId || searchName || searchPhone || filterStatus !== 'all' || specificDate || filterOffer) && (
-        <div className="bg-yellow-50 border-2 border-yellow-300 p-4 rounded-xl mb-6 flex items-center justify-between">
+      {(searchId || searchName || searchPhone || filterStatus !== 'all' || specificDate || filterOffer || filterCoach) && (
+        <div className="bg-yellow-50 border-2 border-yellow-300 p-4 rounded-xl mb-6 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="text-2xl">🔎</span>
             <div>
@@ -560,12 +635,23 @@ export default function MembersPage() {
               <p className="text-sm text-yellow-700">{t('members.showing', { count: filteredMembers.length.toString(), total: members.length.toString() })}</p>
             </div>
           </div>
-          <button
-            onClick={clearAllFilters}
-            className="bg-yellow-600 text-white px-6 py-2 rounded-lg hover:bg-yellow-700 font-medium"
-          >
-            🗑️ {t('members.clearAllFilters')}
-          </button>
+          <div className="flex gap-2 flex-wrap">
+            {(filterStatus === 'expired' || filterStatus === 'expiring-soon') && filteredMembers.length > 0 && (
+              <button
+                onClick={() => setShowWhatsAppModal(true)}
+                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 font-medium flex items-center gap-2"
+              >
+                <span>📱</span>
+                <span>واتساب جماعي ({filteredMembers.length})</span>
+              </button>
+            )}
+            <button
+              onClick={clearAllFilters}
+              className="bg-yellow-600 text-white px-6 py-2 rounded-lg hover:bg-yellow-700 font-medium"
+            >
+              🗑️ {t('members.clearAllFilters')}
+            </button>
+          </div>
         </div>
       )}
 
@@ -582,6 +668,7 @@ export default function MembersPage() {
                     <th className="px-4 py-3 text-right">{t('members.image')}</th>
                     <th className="px-4 py-3 text-right">{t('members.membershipNumber')}</th>
                     <th className="px-4 py-3 text-right">{t('members.name')}</th>
+                    <th className="px-4 py-3 text-right">المدرب</th>
                     <th className="px-4 py-3 text-right">{t('members.phone')}</th>
                     <th className="px-4 py-3 text-right">{t('members.price')}</th>
                     <th className="px-4 py-3 text-right">{t('members.status')}</th>
@@ -626,6 +713,15 @@ export default function MembersPage() {
                               </span>
                             )}
                           </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {member.assignedCoach ? (
+                            <span className="inline-block px-2 py-1 text-sm font-semibold rounded-full bg-purple-100 text-purple-800">
+                              🏋️ {member.assignedCoach.name}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 text-sm">-</span>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           <a
@@ -762,6 +858,17 @@ export default function MembersPage() {
                         </span>
                       )}
                     </div>
+
+                    {/* Coach */}
+                    {member.assignedCoach && (
+                      <div className="pb-2.5 border-b-2 border-gray-100">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-base">🏋️</span>
+                          <span className="text-xs text-gray-500 font-semibold">المدرب</span>
+                        </div>
+                        <div className="text-base font-bold text-purple-600">{member.assignedCoach.name}</div>
+                      </div>
+                    )}
 
                     {/* Phone */}
                     <div className="pb-2.5 border-b-2 border-gray-100">
@@ -948,7 +1055,7 @@ export default function MembersPage() {
 
       {filteredMembers.length === 0 && !loading && (
         <div className="bg-white rounded-lg shadow-md p-12 text-center text-gray-500">
-          {(searchId || searchName || searchPhone || filterStatus !== 'all' || specificDate || filterOffer) ? (
+          {(searchId || searchName || searchPhone || filterStatus !== 'all' || specificDate || filterOffer || filterCoach) ? (
             <>
               <div className="text-6xl mb-4">🔍</div>
               <p className="text-xl">{t('members.noMatchingResults')}</p>
@@ -1105,6 +1212,88 @@ export default function MembersPage() {
                 className="bg-gray-600 text-white px-6 py-2 rounded-lg hover:bg-gray-700"
               >
                 {t('common.close')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* WhatsApp Bulk Modal */}
+      {showWhatsAppModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" dir="rtl">
+          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-green-500 to-green-600 p-5 text-white flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <span className="text-3xl">📱</span>
+                <div>
+                  <h2 className="text-xl font-bold">واتساب جماعي</h2>
+                  <p className="text-sm opacity-90">{filteredMembers.length} عضو</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowWhatsAppModal(false)}
+                className="text-white hover:bg-white hover:text-green-600 rounded-full w-10 h-10 flex items-center justify-center transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Message Template */}
+            <div className="p-4 border-b bg-gray-50">
+              <label className="block text-sm font-semibold mb-2 text-gray-700">نص الرسالة:</label>
+              <textarea
+                value={whatsAppMessage}
+                onChange={e => setWhatsAppMessage(e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-green-500 focus:outline-none text-sm resize-none"
+              />
+              <p className="text-xs text-gray-400 mt-1">اضغط على رقم الهاتف لفتح واتساب مباشرة مع الرسالة</p>
+            </div>
+
+            {/* Members List */}
+            <div className="overflow-y-auto flex-1">
+              {filteredMembers.map(member => {
+                const phone = member.phone?.replace(/\D/g, '')
+                const waLink = `https://wa.me/2${phone}?text=${encodeURIComponent(whatsAppMessage)}`
+                const daysRemaining = calculateRemainingDays(member.expiryDate)
+
+                return (
+                  <div key={member.id} className="flex items-center justify-between px-4 py-3 border-b hover:bg-gray-50">
+                    <div>
+                      <div className="font-medium text-gray-800">{member.name}</div>
+                      <div className="text-xs text-gray-500">
+                        #{member.memberNumber} · {member.phone}
+                        {daysRemaining !== null && daysRemaining <= 0 && (
+                          <span className="mr-2 text-red-500">منتهي</span>
+                        )}
+                        {daysRemaining !== null && daysRemaining > 0 && (
+                          <span className="mr-2 text-orange-500">ينتهي بعد {daysRemaining} يوم</span>
+                        )}
+                      </div>
+                    </div>
+                    <a
+                      href={waLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 text-sm font-medium flex items-center gap-1"
+                    >
+                      <span>📲</span>
+                      <span>إرسال</span>
+                    </a>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-gray-50 border-t flex justify-between items-center">
+              <span className="text-sm text-gray-500">{filteredMembers.length} رسالة</span>
+              <button
+                onClick={() => setShowWhatsAppModal(false)}
+                className="bg-gray-600 text-white px-6 py-2 rounded-lg hover:bg-gray-700"
+              >
+                إغلاق
               </button>
             </div>
           </div>

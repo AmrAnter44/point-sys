@@ -57,6 +57,7 @@ export default function MemberForm({ onSuccess, customCreatedAt }: MemberFormPro
     groupClasses: 0,
     poolSessions: 0,
     paddleSessions: 0,
+    medicalScreeningSessions: 0,
     freezingDays: 0,
     upgradeAllowedDays: 0,
     // Referral and Coach Assignment
@@ -125,13 +126,13 @@ export default function MemberForm({ onSuccess, customCreatedAt }: MemberFormPro
 
     const fetchCoaches = async () => {
       try {
-        const response = await fetch('/api/staff')
+        const response = await fetch('/api/coaches')
         const data = await response.json()
-        // ✅ عرض جميع الكوتشات (نشطين وغير نشطين)
-        const allCoaches = data.filter(
-          (staff: any) => staff.position?.includes('مدرب')
-        )
-        setCoaches(allCoaches)
+        if (Array.isArray(data)) {
+          setCoaches(data)
+        } else {
+          setCoaches([])
+        }
       } catch (error) {
         console.error('❌ خطأ في جلب المدربين:', error)
         setCoaches([])
@@ -329,6 +330,7 @@ export default function MemberForm({ onSuccess, customCreatedAt }: MemberFormPro
       groupClasses: parseInt(formData.groupClasses.toString()),
       poolSessions: parseInt(formData.poolSessions.toString()),
       paddleSessions: parseInt(formData.paddleSessions.toString()),
+      medicalScreeningSessions: parseInt(formData.medicalScreeningSessions.toString()),
       freezingDays: parseInt(formData.freezingDays.toString()),
       upgradeAllowedDays: parseInt(formData.upgradeAllowedDays.toString()),
       staffName: user?.name || '',
@@ -430,6 +432,7 @@ export default function MemberForm({ onSuccess, customCreatedAt }: MemberFormPro
       groupClasses: offer.groupClasses || 0,
       poolSessions: offer.poolSessions || 0,
       paddleSessions: offer.paddleSessions || 0,
+      medicalScreeningSessions: offer.medicalScreeningSessions || 0,
       freezingDays: offer.freezingDays || 0,
       upgradeAllowedDays: offer.upgradeAllowedDays || 0,
       startDate,
@@ -496,6 +499,9 @@ export default function MemberForm({ onSuccess, customCreatedAt }: MemberFormPro
                   <div className="pr-2">🥊 {t('members.form.groupClasses')}: {offer.groupClasses || 0}</div>
                   <div className="pr-2">🏊 {t('members.form.pool')}: {offer.poolSessions === 999 ? t('members.form.unlimited') : (offer.poolSessions || 0)}</div>
                   <div className="pr-2">🎾 {t('members.form.paddle')}: {offer.paddleSessions || 0}</div>
+                  {(offer.medicalScreeningSessions || 0) > 0 && (
+                    <div className="pr-2">🩺 كشف طبي: {offer.medicalScreeningSessions}</div>
+                  )}
 
                   <div className="font-medium text-gray-700 mt-2">📊 {t('members.form.goalsLabel')}:</div>
                   <div className="pr-2">🎯 {t('members.form.attendance')}: {offer.monthlyAttendanceGoal || 0}{t('members.form.perMonth')}</div>

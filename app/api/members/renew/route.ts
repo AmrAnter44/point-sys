@@ -17,8 +17,18 @@ import {
   determineRenewalType,
   calculateSalesRenewalBonus,
   createSalesRenewalCommission,
-  getRenewalTypeFromOffer
+  getRenewalTypeFromOffer,
+  getRenewalTypeFromMonths
 } from '../../../../lib/commissions/salesRenewal'
+import { logActivity, ACTIONS, RESOURCES } from '../../../../lib/activityLog'
+
+// تحويل مدة الباقة (بالأيام) إلى subscriptionType
+function durationToSubscriptionType(days: number): string {
+  if (days <= 35) return '1month'
+  if (days <= 95) return '3months'
+  if (days <= 185) return '6months'
+  return '1year'
+}
 
 // POST - تجديد اشتراك عضو
 export async function POST(request: Request) {
@@ -26,7 +36,7 @@ export async function POST(request: Request) {
 
   try {
     // ✅ التحقق من صلاحية تعديل الأعضاء
-    await requirePermission(request, 'canEditMembers')
+    const currentUser = await requirePermission(request, 'canEditMembers')
 
     const body = await request.json()
     const {
@@ -53,6 +63,7 @@ export async function POST(request: Request) {
       groupClasses = 0,
       poolSessions = 0,
       paddleSessions = 0,
+      medicalScreeningSessions = 0,
       freezingDays = 0,
       upgradeAllowedDays = 0,
       attendanceLimit = 0
@@ -91,10 +102,13 @@ export async function POST(request: Request) {
     let additionalGroupClasses = groupClasses || 0
     let additionalPoolSessions = poolSessions || 0
     let additionalPaddleSessions = paddleSessions || 0
+    let additionalMedicalScreeningSessions = medicalScreeningSessions || 0
     let additionalFreezingDays = freezingDays || 0
     let updatedMonthlyAttendanceGoal = monthlyAttendanceGoal || member.monthlyAttendanceGoal
     let updatedUpgradeAllowedDays = upgradeAllowedDays || member.upgradeAllowedDays
     let updatedAttendanceLimit = attendanceLimit || 0 // حد الحضور (0 = غير محدود)
+    let updatedSubscriptionType: string | undefined = undefined // سيُحدَّث عند اختيار باقة
+    let offerDurationDays: number | undefined = undefined // مدة الباقة بالأيام
 
     if (offerId) {
       console.log('📦 جلب بيانات الباقة:', offerId)
@@ -115,10 +129,13 @@ export async function POST(request: Request) {
         additionalGroupClasses = offer.groupClasses || 0
         additionalPoolSessions = offer.poolSessions || 0
         additionalPaddleSessions = offer.paddleSessions || 0
+        additionalMedicalScreeningSessions = offer.medicalScreeningSessions || 0
         additionalFreezingDays = offer.freezingDays || 0
         updatedMonthlyAttendanceGoal = offer.monthlyAttendanceGoal || 0
         updatedUpgradeAllowedDays = offer.upgradeAllowedDays || 0
         updatedAttendanceLimit = offer.attendanceLimit || 0 // حد الحضور من الباقة
+        updatedSubscriptionType = durationToSubscriptionType(offer.duration)
+        offerDurationDays = offer.duration
 
         console.log('📊 خدمات الباقة:', {
           freePTSessions: additionalFreePT,
@@ -158,6 +175,7 @@ export async function POST(request: Request) {
     const totalGroupClasses = (member.groupClasses || 0) + additionalGroupClasses
     const totalPoolSessions = (member.poolSessions || 0) + additionalPoolSessions
     const totalPaddleSessions = (member.paddleSessions || 0) + additionalPaddleSessions
+    const totalMedicalScreeningSessions = (member.medicalScreeningSessions || 0) + additionalMedicalScreeningSessions
     const totalFreezingDays = (member.freezingDays || 0) + additionalFreezingDays
 
     console.log('💪 حصص PT: الحالية =', currentFreePT, '+ الإضافية =', additionalFreePT, '= الإجمالي =', totalFreePT)
@@ -185,6 +203,7 @@ export async function POST(request: Request) {
         groupClasses: totalGroupClasses,
         poolSessions: totalPoolSessions,
         paddleSessions: totalPaddleSessions,
+        medicalScreeningSessions: totalMedicalScreeningSessions,
         freezingDays: totalFreezingDays,
         upgradeAllowedDays: updatedUpgradeAllowedDays,
         attendanceLimit: updatedAttendanceLimit, // حد الحضور الجديد
@@ -194,6 +213,7 @@ export async function POST(request: Request) {
         notes: notes || member.notes,
         currentOfferId: offerId || oldOfferId,
         currentOfferName: offerName || oldOfferName,
+        ...(updatedSubscriptionType && { subscriptionType: updatedSubscriptionType }),
         referringCoachId: referringCoachId || member.referringCoachId,
       },
     })
@@ -219,18 +239,37 @@ export async function POST(request: Request) {
 
       // ✅ تحديد renewalType للعمولات
       let renewalType: string | null = null
-      const offerNameToUse = offerName || member.currentOfferName // استخدام اسم الباقة الجديدة أو الحالية
+      const offerNameToUse = offerName || member.currentOfferName
 
       if (offerNameToUse) {
         renewalType = getRenewalTypeFromOffer(offerNameToUse)
-        console.log('🎁 تم تحديد renewalType من الباقة:', {
-          offerName: offerName || '(الباقة الحالية)',
-          offerNameUsed: offerNameToUse,
-          renewalType
-        })
-      } else {
-        console.warn('⚠️ لا يوجد اسم باقة - لن يتم حساب عمولة')
+        console.log('🎁 تم تحديد renewalType من اسم الباقة:', { offerNameUsed: offerNameToUse, renewalType })
       }
+
+      // ✅ fallback: لو مفيش renewalType (اسم الباقة عربي مثلاً) نحدده من مدة الباقة
+      if (!renewalType && offerId) {
+        const offerForType = await prisma.offer.findUnique({ where: { id: offerId }, select: { duration: true } })
+        if (offerForType) {
+          renewalType = getRenewalTypeFromMonths(
+            offerForType.duration <= 35 ? 1 :
+            offerForType.duration <= 95 ? 3 :
+            offerForType.duration <= 185 ? 6 : 12
+          )
+          console.log('🔄 تم تحديد renewalType من مدة الباقة:', { duration: offerForType.duration, renewalType })
+        }
+      }
+
+      // ✅ fallback ثانٍ: من subscriptionDays المحسوبة
+      if (!renewalType && subscriptionDays) {
+        renewalType = getRenewalTypeFromMonths(
+          subscriptionDays <= 35 ? 1 :
+          subscriptionDays <= 95 ? 3 :
+          subscriptionDays <= 185 ? 6 : 12
+        )
+        console.log('🔄 تم تحديد renewalType من عدد أيام الاشتراك:', { subscriptionDays, renewalType })
+      }
+
+      if (!renewalType) console.warn('⚠️ لم يتم تحديد renewalType - لن يتم حساب عمولة المبيعات')
 
       const receipt = await prisma.receipt.create({
         data: {
@@ -390,7 +429,7 @@ export async function POST(request: Request) {
       // ⭐ منح نقاط الشراء (التجديد العادي)
       if (paidAmount > 0) {
         try {
-          const purchasePoints = calculatePurchasePoints(paidAmount)
+          const purchasePoints = calculatePurchasePoints(paidAmount, offerDurationDays)
 
           if (purchasePoints > 0) {
             await earnPoints({
@@ -434,6 +473,20 @@ export async function POST(request: Request) {
           console.error('⚠️ خطأ في منح نقاط الترقية (غير حرج):', upgradeError)
         }
       }
+
+      // 📋 تسجيل النشاط
+      logActivity({
+        userId: currentUser.userId,
+        action: ACTIONS.RENEW,
+        resource: RESOURCES.MEMBER,
+        resourceId: member.id,
+        details: JSON.stringify({
+          memberName: member.name,
+          offerName: offerName || member.currentOfferName,
+          price: subscriptionPrice,
+          staffName: staffName?.trim()
+        })
+      })
 
       return NextResponse.json({
         member: updatedMember,

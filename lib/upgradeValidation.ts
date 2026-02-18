@@ -12,6 +12,8 @@ interface UpgradeEligibility {
   reason?: string
   daysRemaining?: number
   currentOffer?: any
+  warning?: string  // تحذير بدون منع الترقية
+  isExpired?: boolean  // هل انتهت فترة الترقية المسموحة
 }
 
 interface AttendanceEligibility {
@@ -113,21 +115,25 @@ export async function checkUpgradeEligibility(
     (Date.now() - member.startDate.getTime()) / (1000 * 60 * 60 * 24)
   )
 
-  // التحقق من الفترة المسموحة
+  const daysRemaining = currentOffer.upgradeAllowedDays - daysSinceStart
+
+  // ✅ السماح بالترقية حتى لو انتهت الفترة المسموحة، مع إظهار تحذير
   if (daysSinceStart > currentOffer.upgradeAllowedDays) {
+    const daysOverdue = daysSinceStart - currentOffer.upgradeAllowedDays
     return {
-      eligible: false,
-      reason: `انتهت فترة الترقية المسموحة (${currentOffer.upgradeAllowedDays} يوم من تاريخ البداية)`,
-      currentOffer
+      eligible: true,
+      daysRemaining: 0,
+      currentOffer,
+      isExpired: true,
+      warning: `⚠️ انتهت فترة الترقية المسموحة منذ ${daysOverdue} يوم، لكن يمكنك المتابعة`
     }
   }
-
-  const daysRemaining = currentOffer.upgradeAllowedDays - daysSinceStart
 
   return {
     eligible: true,
     daysRemaining,
-    currentOffer
+    currentOffer,
+    isExpired: false
   }
 }
 
@@ -192,14 +198,18 @@ export async function calculateUpgradePrice(
 }
 
 /**
- * حساب تاريخ النهاية الجديد بناءً على startDate + المدة الجديدة
+ * حساب تاريخ النهاية الجديد بناءً على:
+ * تاريخ الانتهاء الحالي + (مدة الباقة الجديدة - مدة الباقة الحالية)
+ * بهذا الشكل العضو يحتفظ بأيامه المتبقية ويضاف عليها الفرق فقط
  */
 export function calculateNewExpiryDate(
-  startDate: Date,
-  newOfferDuration: number
+  currentExpiryDate: Date,
+  newOfferDuration: number,
+  currentOfferDuration: number
 ): Date {
-  const newExpiry = new Date(startDate)
-  newExpiry.setDate(newExpiry.getDate() + newOfferDuration)
+  const extraDays = newOfferDuration - currentOfferDuration
+  const newExpiry = new Date(currentExpiryDate)
+  newExpiry.setDate(newExpiry.getDate() + extraDays)
   return newExpiry
 }
 

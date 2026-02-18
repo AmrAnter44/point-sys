@@ -201,22 +201,27 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create commission record if coach referred this sale
+    // 💰 عمولة الكوتش على الباقة المدفوعة
+    // 30% لو الكلاينت عضو في الجيم، 50% لو من برة أو الكوتش باع بنفسه
     if (referringCoachId) {
-      const upsellAmount = calculateUpsellCommission(pricing.finalPrice, 'physiotherapy')
+      const isMember = !!memberId
+      const commissionRate = isMember ? 0.30 : 0.50
+      const upsellAmount = calculateUpsellCommission(pricing.finalPrice, 'physiotherapy', isMember)
 
       await prisma.coachCommission.create({
         data: {
           coachId: referringCoachId,
+          memberId: memberId || null,
           type: 'upsell_physio',
           amount: upsellAmount,
           receiptId: receipt.id,
-          month: new Date().toISOString().slice(0, 7), // "YYYY-MM"
+          month: new Date().toISOString().slice(0, 7),
           calculationDetails: JSON.stringify({
             packageType,
             baseAmount: pricing.finalPrice,
-            rate: 0.05,
-            sessions: pricing.sessionCount
+            rate: commissionRate,
+            sessions: pricing.sessionCount,
+            clientType: isMember ? 'member' : 'outside',
           })
         }
       })

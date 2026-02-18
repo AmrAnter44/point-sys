@@ -78,6 +78,7 @@ export default function UpgradeForm({ member, onSuccess, onClose }: UpgradeFormP
   const [showConfirmation, setShowConfirmation] = useState(false)
   const [coaches, setCoaches] = useState<any[]>([])
   const [referringCoachId, setReferringCoachId] = useState('')
+  const [customPrice, setCustomPrice] = useState<number | null>(null)
   const [attendanceInfo, setAttendanceInfo] = useState<{
     eligible: boolean
     currentAverage: number
@@ -133,6 +134,7 @@ export default function UpgradeForm({ member, onSuccess, onClose }: UpgradeFormP
   const handleOfferSelect = async (offer: UpgradeableOffer) => {
     setSelectedOfferId(offer.id)
     setSelectedOffer(offer)
+    setCustomPrice(null) // reset custom price on offer change
     setError('')
 
     // جلب تفاصيل خصم الحضور
@@ -187,11 +189,13 @@ export default function UpgradeForm({ member, onSuccess, onClose }: UpgradeFormP
   }
 
   const calculateNewExpiryDate = () => {
-    if (!member.startDate || !selectedOffer) return ''
+    if (!member.expiryDate || !selectedOffer || !currentOffer) return ''
 
-    const startDate = new Date(member.startDate)
-    const newExpiry = new Date(startDate)
-    newExpiry.setDate(newExpiry.getDate() + selectedOffer.duration)
+    // الصيغة الصحيحة: تاريخ الانتهاء الحالي + فرق المدتين
+    const extraDays = selectedOffer.duration - (currentOffer.duration || 0)
+    const currentExpiry = new Date(member.expiryDate)
+    const newExpiry = new Date(currentExpiry)
+    newExpiry.setDate(newExpiry.getDate() + extraDays)
 
     return formatDateYMD(newExpiry)
   }
@@ -216,7 +220,8 @@ export default function UpgradeForm({ member, onSuccess, onClose }: UpgradeFormP
           paymentMethod,
           staffName: user?.name || '',
           notes,
-          referringCoachId
+          referringCoachId,
+          customPrice: customPrice !== null ? customPrice : undefined
         })
       })
 
@@ -554,11 +559,21 @@ export default function UpgradeForm({ member, onSuccess, onClose }: UpgradeFormP
                       <span className="font-bold">- {attendanceInfo.discountAmount.toFixed(2)} ج.م</span>
                     </div>
                   )}
-                  <div className="flex justify-between pt-2 border-t-2 border-green-300">
+                  <div className="flex justify-between items-center pt-2 border-t-2 border-green-300">
                     <span className="font-bold">{t('memberDetails.upgradeSubscription.amountDue')}:</span>
-                    <span className="font-bold text-green-600 text-lg">
-                      {selectedOffer.upgradePrice.toLocaleString()} ج.م
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-400 text-sm line-through">
+                        {selectedOffer.upgradePrice.toLocaleString()} ج.م
+                      </span>
+                      <input
+                        type="number"
+                        value={customPrice !== null ? customPrice : selectedOffer.upgradePrice}
+                        onChange={(e) => setCustomPrice(parseFloat(e.target.value) || 0)}
+                        className="w-32 border-2 border-green-400 rounded px-2 py-1 text-green-700 font-bold text-sm focus:outline-none focus:border-green-600"
+                        min="0"
+                      />
+                      <span className="text-sm text-gray-600">ج.م</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -591,8 +606,8 @@ export default function UpgradeForm({ member, onSuccess, onClose }: UpgradeFormP
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
                     <span>{t('memberDetails.upgradeSubscription.startDate')}:</span>
-                    <span className="font-bold text-blue-600">
-                      {member.startDate ? formatDateYMD(member.startDate) : '-'} ({t('memberDetails.upgradeSubscription.staysSame')})
+                    <span className="font-bold text-orange-600">
+                      {formatDateYMD(new Date())} (من اليوم - يبدأ العداد من الصفر)
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
@@ -733,7 +748,7 @@ export default function UpgradeForm({ member, onSuccess, onClose }: UpgradeFormP
               <p className="font-bold mb-2">{t('memberDetails.upgradeSubscription.confirmMessage')}</p>
               <ul className="space-y-1 text-gray-700">
                 <li>• {t('memberDetails.upgradeSubscription.confirmWarning1')}</li>
-                <li>• {t('memberDetails.upgradeSubscription.confirmWarning2')}: <strong>{selectedOffer.upgradePrice.toLocaleString()} ج.م</strong></li>
+                <li>• {t('memberDetails.upgradeSubscription.confirmWarning2')}: <strong>{(customPrice !== null ? customPrice : selectedOffer.upgradePrice).toLocaleString()} ج.م</strong></li>
                 <li>• {t('memberDetails.upgradeSubscription.confirmWarning3')}: <strong>{selectedOffer.name}</strong></li>
               </ul>
             </div>

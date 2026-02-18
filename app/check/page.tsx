@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useLanguage } from '../../contexts/LanguageContext'
 
 export default function CheckMembershipPage() {
@@ -10,12 +10,28 @@ export default function CheckMembershipPage() {
   const [result, setResult] = useState<any>(null)
   const [error, setError] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  const checkoutInputRef = useRef<HTMLInputElement>(null)
+  const [checkoutNumber, setCheckoutNumber] = useState('')
+  const [checkoutLoading, setCheckoutLoading] = useState(false)
+  const [checkoutResult, setCheckoutResult] = useState<{ name: string; duration: number } | null>(null)
+  const [checkoutError, setCheckoutError] = useState('')
   const audioContextRef = useRef<AudioContext | null>(null)
 
   // ✅ تم إزالة منطق الخروج التلقائي - نسجل وقت الدخول فقط
   useEffect(() => {
     inputRef.current?.focus()
   }, [])
+
+  // ✅ auto-dismiss result after 10 seconds
+  useEffect(() => {
+    if (result) {
+      const timer = setTimeout(() => {
+        setResult(null)
+        inputRef.current?.focus()
+      }, 10000)
+      return () => clearTimeout(timer)
+    }
+  }, [result])
 
   const playSuccessSound = () => {
     try {
@@ -148,6 +164,46 @@ export default function CheckMembershipPage() {
     }
   }
 
+  const handleCheckout = async () => {
+    if (!checkoutNumber.trim()) return
+    setCheckoutLoading(true)
+    setCheckoutError('')
+    setCheckoutResult(null)
+    try {
+      // أولاً: نجيب memberId من رقم العضوية
+      const memberRes = await fetch(`/api/members?memberNumber=${checkoutNumber.trim()}`)
+      const memberData = await memberRes.json()
+      const member = Array.isArray(memberData) ? memberData[0] : memberData
+      if (!member?.id) {
+        setCheckoutError('العضو غير موجود')
+        setCheckoutLoading(false)
+        setCheckoutNumber('')
+        return
+      }
+      const res = await fetch('/api/member-checkin/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memberId: member.id })
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setCheckoutResult({ name: member.name, duration: data.durationMinutes || 0 })
+        setTimeout(() => {
+          setCheckoutResult(null)
+          checkoutInputRef.current?.focus()
+        }, 5000)
+      } else {
+        setCheckoutError(data.error || 'فشل تسجيل الخروج')
+      }
+    } catch {
+      setCheckoutError('خطأ في الاتصال')
+    } finally {
+      setCheckoutLoading(false)
+      setCheckoutNumber('')
+      setTimeout(() => checkoutInputRef.current?.focus(), 300)
+    }
+  }
+
   const calculateRemainingDays = (expiryDate: string): number => {
     const expiry = new Date(expiryDate)
     const today = new Date()
@@ -209,6 +265,51 @@ export default function CheckMembershipPage() {
             <p className="text-xs sm:text-sm text-gray-500 mt-3 text-center">
               💡 {t('attendance.pressEnterToSearch')}
             </p>
+          </div>
+        </div>
+
+        {/* Checkout Box */}
+        <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 border-4 border-purple-500 mb-6">
+          <div className="mb-2">
+            <label className="block text-lg sm:text-xl font-bold mb-4 text-gray-800 text-center">
+              🚪 تسجيل الخروج
+            </label>
+
+            {checkoutError && (
+              <div className="mb-4 p-3 bg-red-50 border-2 border-red-500 rounded-xl">
+                <p className="text-red-700 font-bold text-center text-sm">{checkoutError}</p>
+              </div>
+            )}
+
+            {checkoutResult && (
+              <div className="mb-4 p-4 bg-purple-50 border-2 border-purple-500 rounded-xl animate-slideIn text-center">
+                <div className="text-3xl mb-1">👋</div>
+                <p className="font-bold text-purple-800 text-lg">{checkoutResult.name}</p>
+                <p className="text-sm text-purple-600">
+                  مدة الزيارة: {checkoutResult.duration} دقيقة
+                </p>
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <input
+                ref={checkoutInputRef}
+                type="text"
+                value={checkoutNumber}
+                onChange={(e) => setCheckoutNumber(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleCheckout()}
+                className="flex-1 px-4 py-3 sm:px-6 sm:py-4 border-4 border-purple-300 rounded-xl text-2xl sm:text-3xl font-bold text-center focus:border-purple-600 focus:ring-4 focus:ring-purple-200 transition text-gray-800"
+                placeholder="1001"
+                disabled={checkoutLoading}
+              />
+              <button
+                onClick={handleCheckout}
+                disabled={checkoutLoading || !checkoutNumber.trim()}
+                className="px-6 py-3 sm:px-8 sm:py-4 bg-purple-600 text-white text-xl sm:text-2xl font-bold rounded-xl hover:bg-purple-700 disabled:bg-gray-400 transition shadow-lg"
+              >
+                {checkoutLoading ? '⏳' : '🚪'}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -329,7 +430,49 @@ export default function CheckMembershipPage() {
               </div>
             )}
 
-            <div className="mt-6 text-center">
+            {/* السيشنات المتبقية */}
+            {result.status !== 'expired' && (
+              <div className="mt-4 bg-blue-50 border-2 border-blue-300 rounded-xl p-4">
+                <p className="text-sm font-bold text-blue-800 mb-3 text-center">📋 السيشنات المتبقية</p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                  {result.freePTSessions > 0 && (
+                    <div className="bg-white rounded-lg p-2 shadow-sm">
+                      <p className="text-xs text-gray-500">PT سيشن</p>
+                      <p className="text-xl font-bold text-blue-600">{result.freePTSessions}</p>
+                    </div>
+                  )}
+                  {result.inBodyScans > 0 && (
+                    <div className="bg-white rounded-lg p-2 shadow-sm">
+                      <p className="text-xs text-gray-500">InBody</p>
+                      <p className="text-xl font-bold text-green-600">{result.inBodyScans}</p>
+                    </div>
+                  )}
+                  {result.invitations > 0 && (
+                    <div className="bg-white rounded-lg p-2 shadow-sm">
+                      <p className="text-xs text-gray-500">دعوات</p>
+                      <p className="text-xl font-bold text-purple-600">{result.invitations}</p>
+                    </div>
+                  )}
+                  {result.nutritionSessions > 0 && (
+                    <div className="bg-white rounded-lg p-2 shadow-sm">
+                      <p className="text-xs text-gray-500">تغذية</p>
+                      <p className="text-xl font-bold text-orange-600">{result.nutritionSessions}</p>
+                    </div>
+                  )}
+                  {result.freePTSessions === 0 && result.inBodyScans === 0 && result.invitations === 0 && result.nutritionSessions === 0 && (
+                    <div className="col-span-4 text-gray-500 text-sm">لا توجد سيشنات متبقية</div>
+                  )}
+                </div>
+                {result.upgradeDaysRemaining !== null && result.upgradeDaysRemaining > 0 && (
+                  <div className="mt-3 pt-3 border-t border-blue-200 text-center">
+                    <p className="text-xs text-gray-500">⬆️ نافذة الترقية</p>
+                    <p className="text-lg font-bold text-indigo-600">{result.upgradeDaysRemaining} يوم متبقي للترقية</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="mt-4 text-center">
               <button
                 onClick={() => {
                   setResult(null)

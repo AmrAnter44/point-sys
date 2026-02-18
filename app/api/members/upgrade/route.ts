@@ -25,6 +25,7 @@ import {
   getRenewalTypeFromOffer
 } from '../../../../lib/commissions/salesRenewal'
 import { calculateOnboardingBonus, getOnboardingCommissionType } from '../../../../lib/commissions/onboarding'
+import { logActivity, ACTIONS, RESOURCES } from '../../../../lib/activityLog'
 
 // GET - جلب الباقات المتاحة للترقية
 export async function GET(request: Request) {
@@ -59,6 +60,8 @@ export async function GET(request: Request) {
       eligible: true,
       daysRemaining: eligibility.daysRemaining,
       currentOffer: eligibility.currentOffer,
+      isExpired: eligibility.isExpired,
+      warning: eligibility.warning,
       offers
     })
 
@@ -89,10 +92,10 @@ export async function GET(request: Request) {
 // POST - تنفيذ ترقية الاشتراك
 export async function POST(request: Request) {
   try {
-    await requirePermission(request, 'canEditMembers')
+    const currentUser = await requirePermission(request, 'canEditMembers')
 
     const body = await request.json()
-    const { memberId, newOfferId, paymentMethod, staffName, notes, referringCoachId } = body
+    const { memberId, newOfferId, paymentMethod, staffName, notes, referringCoachId, customPrice } = body
 
     console.log('🚀 بدء عملية ترقية الاشتراك:', { memberId, newOfferId })
 
@@ -147,9 +150,14 @@ export async function POST(request: Request) {
     }
 
     // حساب تاريخ النهاية الجديد
+    // الصيغة الصحيحة: تاريخ انتهاء الحالي + (مدة الباقة الجديدة - مدة الباقة الحالية)
+    const currentOfferDuration = eligibility.currentOffer?.duration || 0
+    const upgradeDate = new Date() // تاريخ الترقية = اليوم
+    const currentExpiryDate = member.expiryDate || upgradeDate
     const newExpiryDate = calculateNewExpiryDate(
-      member.startDate,
-      newOffer.duration
+      currentExpiryDate,
+      newOffer.duration,
+      currentOfferDuration
     )
 
     // حفظ معلومات الباقة القديمة
@@ -196,7 +204,7 @@ export async function POST(request: Request) {
         freezingDays: newOffer.freezingDays || 0, // استبدال
         upgradeAllowedDays: newOffer.upgradeAllowedDays || 0, // استبدال
         expiryDate: newExpiryDate,
-        // startDate يبقى كما هو (لا نغيره)
+        startDate: upgradeDate, // ✅ إعادة تعيين من تاريخ الترقية لبدء عداد الحضور من الصفر
         notes: notes || member.notes,
         referringCoachId: referringCoachId || member.referringCoachId,
       }
@@ -233,7 +241,9 @@ export async function POST(request: Request) {
         attempts++
       }
 
-      const paidAmount = priceDetails.upgradePrice
+      const paidAmount = (customPrice !== undefined && customPrice !== null && !isNaN(customPrice))
+        ? Number(customPrice)
+        : priceDetails.upgradePrice
 
       // ✅ تحديد renewalType للعمولات من اسم الباقة الجديدة
       const renewalType = getRenewalTypeFromOffer(newOffer.name)
@@ -291,7 +301,7 @@ export async function POST(request: Request) {
             },
 
             dates: {
-              startDate: member.startDate,
+              startDate: upgradeDate,
               oldExpiryDate,
               newExpiryDate
             },
@@ -457,6 +467,21 @@ export async function POST(request: Request) {
     } catch (receiptError) {
       console.error('❌ خطأ في إنشاء الإيصال:', receiptError)
     }
+
+    // 📋 تسجيل النشاط
+    logActivity({
+      userId: currentUser.userId,
+      action: ACTIONS.UPGRADE,
+      resource: RESOURCES.MEMBER,
+      resourceId: member.id,
+      details: JSON.stringify({
+        memberName: member.name,
+        oldOffer: oldOfferName,
+        newOffer: newOffer.name,
+        price: priceDetails.upgradePrice,
+        staffName: staffName?.trim()
+      })
+    })
 
     return NextResponse.json({
       member: updatedMember,

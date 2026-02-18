@@ -22,6 +22,7 @@ interface Offer {
   groupClasses: number
   poolSessions: number
   paddleSessions: number
+  medicalScreeningSessions: number
   freezingDays: number
   attendanceLimit: number
   icon: string
@@ -60,6 +61,7 @@ export default function OffersPage() {
     groupClasses: 0,
     poolSessions: 0,
     paddleSessions: 0,
+    medicalScreeningSessions: 0,
     freezingDays: 0,
     attendanceLimit: 0,
     icon: '🎁'
@@ -182,6 +184,7 @@ export default function OffersPage() {
       groupClasses: 0,
       poolSessions: 0,
       paddleSessions: 0,
+      medicalScreeningSessions: 0,
       freezingDays: 0,
       attendanceLimit: 0,
       icon: '🎁'
@@ -208,6 +211,7 @@ export default function OffersPage() {
       groupClasses: offer.groupClasses,
       poolSessions: offer.poolSessions,
       paddleSessions: offer.paddleSessions,
+      medicalScreeningSessions: offer.medicalScreeningSessions || 0,
       freezingDays: offer.freezingDays,
       attendanceLimit: offer.attendanceLimit || 0,
       icon: offer.icon
@@ -490,6 +494,9 @@ export default function OffersPage() {
                         <div>🥊 {t('offers.groupClasses')}: {offer.groupClasses}</div>
                         <div>🏊 {t('offers.pool')}: {offer.poolSessions === 999 ? t('offers.unlimited') : offer.poolSessions}</div>
                         <div>🎾 {t('offers.paddle')}: {offer.paddleSessions}</div>
+                        {(offer.medicalScreeningSessions || 0) > 0 && (
+                          <div>🩺 كشف طبي: {offer.medicalScreeningSessions}</div>
+                        )}
                       </div>
                     </div>
 
@@ -738,6 +745,15 @@ export default function OffersPage() {
                           type="number"
                           value={formData.paddleSessions}
                           onChange={(e) => setFormData({ ...formData, paddleSessions: parseInt(e.target.value) || 0 })}
+                          className="w-full px-2 py-1 border-2 rounded text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium mb-1">🩺 كشف طبي</label>
+                        <input
+                          type="number"
+                          value={(formData as any).medicalScreeningSessions || 0}
+                          onChange={(e) => setFormData({ ...formData, medicalScreeningSessions: parseInt(e.target.value) || 0 } as any)}
                           className="w-full px-2 py-1 border-2 rounded text-sm"
                         />
                       </div>

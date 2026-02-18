@@ -13,8 +13,23 @@ export interface UserPayload {
   permissions?: Permissions
 }
 
+// ✅ Dev bypass user (SKIP_AUTH=true in .env)
+const DEV_USER: UserPayload = {
+  userId: 'dev-admin',
+  name: 'Dev Admin',
+  email: 'dev@localhost',
+  role: 'ADMIN',
+  staffId: null,
+  permissions: undefined
+}
+
 // ✅ التحقق من المصادقة
 export async function verifyAuth(request: Request): Promise<UserPayload | null> {
+  // 🔓 Dev bypass: skip auth when SKIP_AUTH=true (development only)
+  if (process.env.SKIP_AUTH === 'true' && process.env.NODE_ENV !== 'production') {
+    return DEV_USER
+  }
+
   try {
     // قراءة الـ cookie من headers مباشرة (أكثر موثوقية)
     const cookieHeader = request.headers.get('cookie')

@@ -1,51 +1,40 @@
+// app/api/coaches/route.ts
+// Returns coaches list - accessible to any logged-in user (needed for member creation)
 import { NextResponse } from 'next/server'
 import { prisma } from '../../../lib/prisma'
 import { verifyAuth } from '../../../lib/auth'
 
-// GET - جلب قائمة الموظفين لاختيار المدرب
 export async function GET(request: Request) {
   try {
-    // التحقق من المصادقة فقط (بدون صلاحيات محددة)
     const user = await verifyAuth(request)
+
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: 'يجب تسجيل الدخول أولاً' }, { status: 401 })
     }
 
-    // ✅ جلب جميع الموظفين (نشطين وغير نشطين) الذين دورهم COACH
-    const allStaff = await prisma.staff.findMany({
+    const coaches = await prisma.staff.findMany({
       where: {
-        // تم إزالة isActive: true - عرض جميع الكوتشات
+        position: { contains: 'مدرب' }
       },
-      include: {
-        user: {
-          select: {
-            role: true,
-          },
-        },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        position: true,
+        staffCode: true,
+        isActive: true
       },
-      orderBy: {
-        name: 'asc',
-      },
+      orderBy: { name: 'asc' }
     })
 
-    // فلتر الموظفين الذين دورهم COACH فقط
-    const coaches = allStaff.filter(staff => staff.user && staff.user.role === 'COACH')
-
-    // إرجاع البيانات بدون حقل user
-    const formattedCoaches = coaches.map(coach => ({
-      id: coach.id,
-      name: coach.name,
-      staffCode: coach.staffCode,
-      position: coach.position,
-    }))
-
-    console.log('📋 Found coaches:', formattedCoaches.length, formattedCoaches)
-    return NextResponse.json(formattedCoaches)
-  } catch (error) {
+    return NextResponse.json(coaches)
+  } catch (error: any) {
     console.error('Error fetching coaches:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch coaches' },
-      { status: 500 }
-    )
+
+    if (error.message === 'Unauthorized') {
+      return NextResponse.json({ error: 'يجب تسجيل الدخول أولاً' }, { status: 401 })
+    }
+
+    return NextResponse.json({ error: 'فشل جلب المدربين' }, { status: 500 })
   }
 }

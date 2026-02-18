@@ -312,6 +312,9 @@ export default function RenewalForm({ member, onSuccess, onClose }: RenewalFormP
                     <div className="pr-2">🥊 {t('renewal.groupClasses')}: {offer.groupClasses || 0}</div>
                     <div className="pr-2">🏊 {t('renewal.pool')}: {offer.poolSessions === 999 ? t('renewal.unlimited') : (offer.poolSessions || 0)}</div>
                     <div className="pr-2">🎾 {t('renewal.paddle')}: {offer.paddleSessions || 0}</div>
+                    {(offer.medicalScreeningSessions || 0) > 0 && (
+                      <div className="pr-2">🩺 كشف طبي: {offer.medicalScreeningSessions}</div>
+                    )}
 
                     <div className="font-medium text-gray-700 mt-2">📊 {t('renewal.goals')}:</div>
                     <div className="pr-2">🎯 {t('renewal.attendance')}: {offer.monthlyAttendanceGoal || 0}/{t('renewal.month')}</div>

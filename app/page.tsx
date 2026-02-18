@@ -24,6 +24,7 @@ export default function HomePage() {
   const [revenueChartData, setRevenueChartData] = useState<any[]>([])
   const [attendanceChartData, setAttendanceChartData] = useState<any[]>([])
   const [receiptsData, setReceiptsData] = useState<any[]>([])
+  const [retentionData, setRetentionData] = useState<{ rate: number; expired: number; renewed: number } | null>(null)
 
   useEffect(() => {
     checkAuth()
@@ -156,6 +157,15 @@ export default function HomePage() {
       }
       setAttendanceChartData(hourlyData)
 
+      // 📈 جلب معدل الاستمرارية
+      try {
+        const retentionRes = await fetch('/api/admin/retention')
+        if (retentionRes.ok) {
+          const retentionJson = await retentionRes.json()
+          setRetentionData(retentionJson.current)
+        }
+      } catch { /* non-critical */ }
+
     } catch (error) {
       console.error('Error fetching stats:', error)
     }
@@ -276,6 +286,27 @@ export default function HomePage() {
             <div className="text-4xl">📊</div>
           </div>
         </div>
+
+        {retentionData !== null && (
+          <div className={`p-6 rounded-lg shadow-md border-2 ${
+            retentionData.rate >= 70 ? 'bg-gradient-to-br from-green-50 to-green-100 border-green-500' :
+            retentionData.rate >= 40 ? 'bg-gradient-to-br from-yellow-50 to-yellow-100 border-yellow-500' :
+            'bg-gradient-to-br from-red-50 to-red-100 border-red-500'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-gray-700">معدل الاستمرارية</p>
+                <p className="text-3xl font-bold">{retentionData.rate}%</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {retentionData.renewed} من {retentionData.expired} جددوا (آخر 30 يوم)
+                </p>
+              </div>
+              <div className="text-4xl">
+                {retentionData.rate >= 70 ? '🔥' : retentionData.rate >= 40 ? '📈' : '📉'}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 📊 الجرافات - إيرادات وحضور */}
@@ -387,7 +418,39 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+
+      {/* 📈 معدل الاستمرارية الشهري */}
+      {retentionData !== null && (
+        <div className="bg-white rounded-2xl shadow-xl border-2 border-blue-200 p-6 mb-8">
+          <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <span className="text-2xl">📈</span>
+            <span>معدل الاستمرارية</span>
+          </h2>
+          <div className="flex flex-col sm:flex-row gap-4 items-center mb-4">
+            <div className={`text-center p-4 rounded-xl flex-shrink-0 ${
+              retentionData.rate >= 70 ? 'bg-green-50 border-2 border-green-400' :
+              retentionData.rate >= 40 ? 'bg-yellow-50 border-2 border-yellow-400' :
+              'bg-red-50 border-2 border-red-400'
+            }`}>
+              <div className="text-4xl font-bold">{retentionData.rate}%</div>
+              <div className="text-xs text-gray-500 mt-1">آخر 30 يوم</div>
+              <div className="text-xs text-gray-600 mt-1">
+                {retentionData.renewed} جدد من {retentionData.expired}
+              </div>
+            </div>
+            <div className="text-sm text-gray-500 flex-1">
+              <p className="font-semibold mb-1">كيف يُحسب؟</p>
+              <p>نسبة الأعضاء الذين جددوا اشتراكهم من بين الأعضاء الذين انتهت اشتراكاتهم في نفس الفترة.</p>
+              <div className="mt-2 flex gap-3 flex-wrap text-xs">
+                <span className="bg-green-100 text-green-700 px-2 py-1 rounded">70%+ ممتاز</span>
+                <span className="bg-yellow-100 text-yellow-700 px-2 py-1 rounded">40-70% جيد</span>
+                <span className="bg-red-100 text-red-700 px-2 py-1 rounded">أقل من 40% يحتاج تحسين</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
-    
+
   )
 }

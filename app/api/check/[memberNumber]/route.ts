@@ -93,7 +93,12 @@ export async function GET(
         freezeEndDate: true,
         birthdate: true,
         lastBirthdayReward: true,
-        attendanceLimit: true, // حد الحضور
+        attendanceLimit: true,      // حد الحضور
+        freePTSessions: true,       // سيشنات PT المتبقية
+        inBodyScans: true,          // سيشنات InBody المتبقية
+        invitations: true,          // الدعوات المتبقية
+        nutritionSessions: true,    // سيشنات التغذية المتبقية
+        upgradeAllowedDays: true,   // نافذة الترقية
         // ❌ لا نرجع: phone, subscriptionPrice, remainingAmount, staffName, notes
       }
     })
@@ -267,6 +272,13 @@ export async function GET(
       }
     }
 
+    // حساب أيام الترقية المتبقية
+    let upgradeDaysRemaining: number | null = null
+    if (member.upgradeAllowedDays && member.upgradeAllowedDays > 0 && member.startDate) {
+      const daysSinceStart = Math.floor((today.getTime() - member.startDate.getTime()) / (1000 * 60 * 60 * 24))
+      upgradeDaysRemaining = Math.max(0, member.upgradeAllowedDays - daysSinceStart)
+    }
+
     // ✅ إرجاع معلومات آمنة فقط
     return NextResponse.json({
       name: member.name,
@@ -282,7 +294,14 @@ export async function GET(
       attendanceDaysUsed: attendanceDaysUsed,
       attendanceRemaining: attendanceRemaining,
       isUnlimited: isUnlimited,
-      attendanceLimitWarning: attendanceLimitWarning
+      attendanceLimitWarning: attendanceLimitWarning,
+      // السيشنات المتبقية
+      freePTSessions: member.freePTSessions || 0,
+      inBodyScans: member.inBodyScans || 0,
+      invitations: member.invitations || 0,
+      nutritionSessions: member.nutritionSessions || 0,
+      // أيام الترقية المتبقية
+      upgradeDaysRemaining: upgradeDaysRemaining,
     })
 
   } catch (error) {
